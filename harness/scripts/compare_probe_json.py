@@ -152,7 +152,7 @@ def compare_value(expected, actual, label, differences):
 
 
 def duration_tolerance(stream):
-    if stream.get("codec_type") == "audio" and stream.get("codec_name") in {"aac", "mp3", "opus"}:
+    if stream.get("codec_type") == "audio" and stream.get("codec_name") in {"aac", "mp3", "opus", "vorbis"}:
         return COMPRESSED_AUDIO_DURATION_TOLERANCE_SECONDS
     return DEFAULT_DURATION_TOLERANCE_SECONDS
 

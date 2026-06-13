@@ -172,6 +172,25 @@ def write_compressed_samples():
             "-f",
             "lavfi",
             "-i",
+            "sine=frequency=770:sample_rate=44100:duration=1",
+            "-ac",
+            "2",
+            "-c:a",
+            "libvorbis",
+            "-b:a",
+            "96k",
+            str(SAMPLES / "tone_vorbis.ogg"),
+        ]
+    )
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
             "testsrc=size=64x48:rate=10:duration=1",
             "-f",
             "lavfi",

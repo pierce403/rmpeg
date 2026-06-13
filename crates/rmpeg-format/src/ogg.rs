@@ -29,9 +29,11 @@ pub fn parse_ogg(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if first_packet.starts_with(b"OpusHead") {
         parse_opus_head(&first_packet, last_granule)
+    } else if first_packet.starts_with(b"\x01vorbis") {
+        parse_vorbis_identification(&first_packet, last_granule)
     } else {
         Err(RmpegError::Unsupported(
-            "only Ogg Opus probing is implemented".to_string(),
+            "only Ogg Opus and Ogg Vorbis probing is implemented".to_string(),
         ))
     }
 }
@@ -132,6 +134,39 @@ fn parse_opus_head(packet: &[u8], last_granule: Option<u64>) -> Result<ProbeDocu
             0,
             "opus",
             48_000,
+            channels,
+            0,
+            duration_seconds,
+        )],
+    })
+}
+
+fn parse_vorbis_identification(packet: &[u8], last_granule: Option<u64>) -> Result<ProbeDocument> {
+    if packet.len() < 30 {
+        return Err(RmpegError::UnexpectedEof {
+            needed: 30,
+            remaining: packet.len(),
+        });
+    }
+    let channels = u16::from(packet[11]);
+    if channels == 0 {
+        return Err(RmpegError::InvalidData(
+            "Vorbis identification header has zero channels".to_string(),
+        ));
+    }
+    let sample_rate = u32::from_le_bytes([packet[12], packet[13], packet[14], packet[15]]);
+    if sample_rate == 0 {
+        return Err(RmpegError::InvalidData(
+            "Vorbis identification header has zero sample rate".to_string(),
+        ));
+    }
+    let duration_seconds = last_granule.unwrap_or(0) as f64 / sample_rate as f64;
+    Ok(ProbeDocument {
+        format: "ogg".to_string(),
+        streams: vec![StreamMetadata::audio(
+            0,
+            "vorbis",
+            sample_rate,
             channels,
             0,
             duration_seconds,

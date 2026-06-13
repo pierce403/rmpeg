@@ -12,6 +12,7 @@ TONE_MP3 = ROOT / "harness" / "samples" / "tone_mp3.mp3"
 H264_AAC_MP4 = ROOT / "harness" / "samples" / "h264_aac_mp4.mp4"
 TONE_FLAC = ROOT / "harness" / "samples" / "tone_flac.flac"
 TONE_OPUS = ROOT / "harness" / "samples" / "tone_opus.ogg"
+TONE_VORBIS = ROOT / "harness" / "samples" / "tone_vorbis.ogg"
 BENCHMARKS = ROOT / "site" / "data" / "benchmarks.json"
 SUMMARY = ROOT / "site" / "data" / "benchmark-summary.json"
 
@@ -20,7 +21,7 @@ def main():
     require_tool("hyperfine")
     require_tool("ffprobe")
     require_tool("ffmpeg")
-    for sample in (TINY_WAV, TONE_MP3, H264_AAC_MP4, TONE_FLAC, TONE_OPUS):
+    for sample in (TINY_WAV, TONE_MP3, H264_AAC_MP4, TONE_FLAC, TONE_OPUS, TONE_VORBIS):
         if not sample.exists():
             raise SystemExit(f"missing {sample}; run cargo xtask samples first")
 
@@ -39,6 +40,8 @@ def main():
         ("rmpeg-probe probe tone flac", f"{rmpeg_probe} {TONE_FLAC}"),
         ("ffprobe probe tone opus", f"ffprobe -v error -show_format -show_streams -of json {TONE_OPUS}"),
         ("rmpeg-probe probe tone opus", f"{rmpeg_probe} {TONE_OPUS}"),
+        ("ffprobe probe tone vorbis", f"ffprobe -v error -show_format -show_streams -of json {TONE_VORBIS}"),
+        ("rmpeg-probe probe tone vorbis", f"{rmpeg_probe} {TONE_VORBIS}"),
         ("ffprobe probe h264 aac mp4", f"ffprobe -v error -show_format -show_streams -of json {H264_AAC_MP4}"),
         ("rmpeg-probe probe h264 aac mp4", f"{rmpeg_probe} {H264_AAC_MP4}"),
         ("ffmpeg framemd5 tiny wav", f"ffmpeg -v error -i {TINY_WAV} -f framemd5 -"),
@@ -86,8 +89,8 @@ def write_summary(commands):
     benchmarks.append(
         summarize_pair(
             "probe h264/aac mp4",
-            by_name.get("ffprobe probe h264 aac mp4") or by_command[commands[8][1]],
-            by_name.get("rmpeg-probe probe h264 aac mp4") or by_command[commands[9][1]],
+            by_name.get("ffprobe probe h264 aac mp4") or by_command[commands[10][1]],
+            by_name.get("rmpeg-probe probe h264 aac mp4") or by_command[commands[11][1]],
         )
     )
     benchmarks.append(
@@ -106,9 +109,16 @@ def write_summary(commands):
     )
     benchmarks.append(
         summarize_pair(
+            "probe tone vorbis",
+            by_name.get("ffprobe probe tone vorbis") or by_command[commands[8][1]],
+            by_name.get("rmpeg-probe probe tone vorbis") or by_command[commands[9][1]],
+        )
+    )
+    benchmarks.append(
+        summarize_pair(
             "framemd5 tiny wav",
-            by_name.get("ffmpeg framemd5 tiny wav") or by_command[commands[10][1]],
-            by_name.get("rmpeg framemd5 tiny wav") or by_command[commands[11][1]],
+            by_name.get("ffmpeg framemd5 tiny wav") or by_command[commands[12][1]],
+            by_name.get("rmpeg framemd5 tiny wav") or by_command[commands[13][1]],
         )
     )
     SUMMARY.write_text(
