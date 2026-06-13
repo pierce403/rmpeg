@@ -39,6 +39,36 @@
         max-width: 760px;
       }
 
+      a {
+        color: #1c5f91;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+      }
+
+      .masthead {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .repo-link {
+        border: 1px solid #b9c2c7;
+        border-radius: 6px;
+        color: #171b1f;
+        display: inline-flex;
+        font-weight: 700;
+        line-height: 1;
+        padding: 10px 12px;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .repo-link:hover {
+        border-color: #2f6f65;
+        color: #2f6f65;
+      }
+
       .subtitle {
         margin: 12px 0 6px;
         font-size: 1.35rem;
@@ -46,6 +76,66 @@
 
       .stamp {
         color: #596065;
+        font-size: 0.92rem;
+      }
+
+      .phase-panel {
+        border-top: 1px solid #cfd3cb;
+        border-bottom: 1px solid #cfd3cb;
+        margin: 36px 0 18px;
+        padding: 22px 0 24px;
+      }
+
+      .phase-row {
+        align-items: end;
+        display: flex;
+        gap: 20px;
+        justify-content: space-between;
+      }
+
+      .phase-kicker {
+        color: #2f6f65;
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0;
+        margin: 0 0 4px;
+        text-transform: uppercase;
+      }
+
+      .phase-panel h2 {
+        margin: 0 0 8px;
+      }
+
+      .phase-panel p {
+        margin: 0;
+      }
+
+      .phase-percent {
+        color: #2f6f65;
+        font-size: 3rem;
+        font-weight: 800;
+        line-height: 1;
+      }
+
+      .phase-progress-track {
+        background: #e2e3db;
+        border: 1px solid #c7cbc2;
+        border-radius: 6px;
+        height: 18px;
+        margin: 18px 0 12px;
+        overflow: hidden;
+      }
+
+      .phase-progress-fill {
+        background: #2f6f65;
+        height: 100%;
+      }
+
+      .phase-metrics {
+        color: #3c4448;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 18px;
         font-size: 0.92rem;
       }
 
@@ -126,8 +216,23 @@
         }
 
         .stamp,
-        th {
+        th,
+        .phase-metrics {
           color: #b4bdc2;
+        }
+
+        a {
+          color: #8cc7f5;
+        }
+
+        .repo-link {
+          border-color: #4a555c;
+          color: #edf1f2;
+        }
+
+        .repo-link:hover {
+          border-color: #6bb8a9;
+          color: #6bb8a9;
         }
 
         th,
@@ -144,17 +249,62 @@
         }
 
         tr.not-started td,
-        pre {
+        pre,
+        .phase-progress-track {
           background: #202529;
+        }
+
+        .phase-panel {
+          border-color: #30373d;
+        }
+
+        .phase-progress-track {
+          border-color: #30373d;
+        }
+
+        .phase-progress-fill {
+          background: #6bb8a9;
+        }
+
+        .phase-kicker,
+        .phase-percent {
+          color: #6bb8a9;
+        }
+      }
+
+      @media (max-width: 680px) {
+        main {
+          padding-top: 32px;
+        }
+
+        h1 {
+          font-size: 3rem;
+        }
+
+        .masthead,
+        .phase-row {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .phase-percent {
+          font-size: 2.5rem;
         }
       }
     </style>
   </head>
   <body>
     <main>
-      <h1>rmpeg</h1>
-      <p class="subtitle">A Rust media stack tested against FFmpeg.</p>
-      <p class="stamp">Generated from local correctness and benchmark JSON at {{generated_at}}.</p>
+      <div class="masthead">
+        <div>
+          <h1>rmpeg</h1>
+          <p class="subtitle">A Rust media stack tested against FFmpeg.</p>
+          <p class="stamp">Generated from local correctness and benchmark JSON at {{generated_at}}.</p>
+        </div>
+        <a class="repo-link" href="https://github.com/pierce403/rmpeg">GitHub</a>
+      </div>
+
+      {{phase_progress}}
 
       <h2>Current Status</h2>
       <p>rmpeg is not FFmpeg-compatible yet. The MVP has WAV decode/hash plus probe-level MP3, FLAC, Ogg/Opus, Ogg/Vorbis, and MP4/H.264/AAC metadata.</p>

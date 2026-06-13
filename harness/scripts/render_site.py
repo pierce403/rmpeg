@@ -22,6 +22,7 @@ def main():
     replacements = {
         "generated_at": escape(correctness.get("generated_at", "unknown")),
         "current_status": render_current_status(correctness),
+        "phase_progress": render_phase_progress(upstream_samples),
         "correctness": render_correctness(correctness),
         "upstream_samples": render_upstream_samples(upstream_samples),
         "benchmarks": render_benchmarks(benchmark_summary),
@@ -83,6 +84,52 @@ def render_current_status(correctness):
         ("Filters", "not started", "not-started"),
     ]
     return table(["Area", "Status"], rows)
+
+
+def render_phase_progress(report):
+    tests = report.get("tests", [])
+    summary = report.get("summary", {})
+    media_total = sum(1 for test in tests if test.get("ffprobe_returncode") == 0)
+    media_passed = sum(
+        1
+        for test in tests
+        if test.get("ffprobe_returncode") == 0 and test.get("status") == "passed"
+    )
+    if media_total == 0:
+        return (
+            '<section class="phase-panel" aria-labelledby="phase-1-title">'
+            '<div class="phase-row"><div>'
+            '<p class="phase-kicker">Phase 1</p>'
+            '<h2 id="phase-1-title">Sample Media Progress</h2>'
+            "<p>No upstream FFmpeg sample media report has been generated yet.</p>"
+            "</div></div></section>"
+        )
+
+    percent = media_passed / media_total * 100
+    total_files = int(summary.get("total", len(tests)) or 0)
+    ffprobe_accepted = int(summary.get("ffprobe_accepted", media_total) or 0)
+    corpus_passed = int(summary.get("passed", 0) or 0)
+    return f"""
+      <section class="phase-panel" aria-labelledby="phase-1-title">
+        <div class="phase-row">
+          <div>
+            <p class="phase-kicker">Phase 1</p>
+            <h2 id="phase-1-title">Sample Media Progress</h2>
+            <p>rmpeg can currently inspect {media_passed} of {media_total} FFmpeg-accepted sample media files in the upstream FATE corpus.</p>
+          </div>
+          <div class="phase-percent">{percent:.1f}%</div>
+        </div>
+        <div class="phase-progress-track" role="img" aria-label="Phase 1 progress {percent:.1f} percent">
+          <div class="phase-progress-fill" style="width: {percent:.1f}%"></div>
+        </div>
+        <div class="phase-metrics">
+          <span><strong>{media_passed}</strong> media matches</span>
+          <span><strong>{ffprobe_accepted}</strong> FFmpeg-accepted media files</span>
+          <span><strong>{corpus_passed}</strong> total corpus passes</span>
+          <span><strong>{total_files}</strong> files checked</span>
+        </div>
+      </section>
+    """
 
 
 def status_row(label, tests, kind, prefix):
