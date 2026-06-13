@@ -145,13 +145,16 @@ If `AGENT_CMD` is unset, `autoslop.sh` tries installed local harnesses in this o
 `autoslop.sh` requires a clean working tree, records the baseline strict media
 match count, runs one agent attempt, reruns the local gate, blocks protected
 path edits, and keeps the attempt only if strict media progress improves without
-new corpus errors, new false accepts, or mirrored-score regression. By default
-it requires at least a 1.0 absolute percentage point Phase 1 gain. Override with:
+new corpus errors, new false accepts, or mirrored-score regression. The coding
+harness starts only after the baseline strict media line is printed; the long
+`ffmpeg-samples-check` step prints corpus progress while it runs. By default it
+requires at least a 1.0 absolute percentage point Phase 1 gain. Override with:
 
 ```bash
 AUTOSLOP_MIN_PERCENT_GAIN=0 AUTOSLOP_MIN_STRICT_GAIN=1 ./autoslop.sh
 ```
 
+Use `RMPEG_FFMPEG_SAMPLE_LIMIT=100` only for smoke-testing the loop shape.
 Set `AUTOSLOP_PUSH=1` to push a kept commit to `origin/main`.
 
 ## Automerge

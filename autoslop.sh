@@ -32,6 +32,9 @@ Guardrail environment:
   AUTOSLOP_PROMPT=agents/autoslop.md
   AUTOSLOP_COMMIT_MESSAGE="autoslop: improve sample media progress"
   AUTOSLOP_PUSH=1                  push the kept commit to origin/main
+  RMPEG_FFMPEG_SAMPLE_LIMIT=100     optional smoke-test limit for local debugging
+
+The coding harness starts only after the baseline strict media metric is printed.
 EOF
 }
 
@@ -85,26 +88,51 @@ resolve_agent_cmd() {
 }
 
 run_cmd() {
+  local start status elapsed
+  start="$SECONDS"
   say "+ $*"
+  set +e
   "$@"
+  status=$?
+  set -e
+  elapsed=$((SECONDS - start))
+  if [[ "$status" -eq 0 ]]; then
+    say "ok (${elapsed}s): $*"
+  else
+    say "failed (${elapsed}s, exit ${status}): $*"
+  fi
+  return "$status"
 }
 
 run_baseline() {
+  say "baseline stage 1/4: generated local fixtures"
   run_cmd cargo xtask samples
+  say "baseline stage 2/4: FFmpeg references for mirrored tests"
   run_cmd cargo xtask reference
+  say "baseline stage 3/4: mirrored mini-suite"
   run_cmd cargo xtask fate-mini
+  say "baseline stage 4/4: upstream FFmpeg sample corpus; the coding harness has not started yet"
   run_cmd cargo xtask ffmpeg-samples-check
 }
 
 run_after_gate() {
+  say "guardrail stage 1/9: formatting"
   run_cmd cargo fmt --check &&
+    say "guardrail stage 2/9: clippy" &&
     run_cmd cargo clippy --workspace -- -D warnings &&
+    say "guardrail stage 3/9: Rust tests" &&
     run_cmd cargo test --workspace &&
+    say "guardrail stage 4/9: generated local fixtures" &&
     run_cmd cargo xtask samples &&
+    say "guardrail stage 5/9: FFmpeg references" &&
     run_cmd cargo xtask reference &&
+    say "guardrail stage 6/9: mirrored mini-suite" &&
     run_cmd cargo xtask fate-mini &&
+    say "guardrail stage 7/9: upstream FFmpeg sample corpus" &&
     run_cmd cargo xtask ffmpeg-samples-check &&
+    say "guardrail stage 8/9: benchmarks" &&
     run_cmd cargo xtask bench &&
+    say "guardrail stage 9/9: generated site" &&
     run_cmd cargo xtask site
 }
 
@@ -236,6 +264,13 @@ GATE_STATUS=999
 FORBIDDEN_FILES=""
 
 say "baseline from $ORIGINAL_COMMIT"
+say "selected coding harness command: $AGENT_COMMAND"
+say "first measuring baseline metrics; the coding harness starts after the baseline strict media line"
+if [[ -n "${RMPEG_FFMPEG_SAMPLE_LIMIT:-}" ]]; then
+  say "using RMPEG_FFMPEG_SAMPLE_LIMIT=$RMPEG_FFMPEG_SAMPLE_LIMIT for the upstream corpus check"
+else
+  say "using full upstream corpus; ffmpeg-samples-check can take several minutes"
+fi
 run_baseline
 read -r BASE_STRICT BASE_ACCEPTED BASE_PERCENT BASE_TOTAL_PASSED BASE_ERRORS BASE_FALSE_ACCEPTS BASE_MIRRORED_SCORE < <(metrics)
 say "baseline strict media: $BASE_STRICT / $BASE_ACCEPTED (${BASE_PERCENT}%)"

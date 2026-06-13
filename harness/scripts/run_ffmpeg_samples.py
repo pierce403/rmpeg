@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -109,7 +110,24 @@ def check_samples(rmpeg_probe, output):
     if limit:
         sample_files = sample_files[: int(limit)]
 
-    tests = [check_one(path, samples_dir, rmpeg_probe, timeout) for path in sample_files]
+    print(
+        f"checking {len(sample_files)} FFmpeg FATE sample files with timeout {timeout:g}s",
+        flush=True,
+    )
+    tests = []
+    progress_every = int(os.environ.get("RMPEG_FFMPEG_PROGRESS_EVERY", "100"))
+    last_progress = time.monotonic()
+    for index, path in enumerate(sample_files, start=1):
+        tests.append(check_one(path, samples_dir, rmpeg_probe, timeout))
+        current_time = time.monotonic()
+        if (
+            index == len(sample_files)
+            or (progress_every > 0 and index % progress_every == 0)
+            or current_time - last_progress >= 15
+        ):
+            print(f"checked {index} / {len(sample_files)} sample files", flush=True)
+            last_progress = current_time
+
     document = {
         "generated_at": now(),
         "rmpeg_commit": git_commit(),
