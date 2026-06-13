@@ -340,7 +340,7 @@
       {{phase_progress}}
 
       <h2>Current Status</h2>
-      <p>rmpeg is not FFmpeg-compatible yet. The MVP has WAV decode/hash plus probe-level MP3, FLAC, Ogg/Opus, Ogg/Vorbis, MP4/H.264/AAC, IVF/VP8/VP9/AV1, and binary PNM image metadata.</p>
+      <p>rmpeg is not FFmpeg-compatible yet. The MVP has WAV decode/hash plus probe-level MP3, FLAC, Ogg/Opus, Ogg/Vorbis, MP4/H.264/AAC, raw Annex B H.264, IVF/VP8/VP9/AV1, and binary PNM image metadata.</p>
       {{current_status}}
 
       <h2>Correctness</h2>
@@ -354,7 +354,7 @@
       {{benchmarks}}
 
       <h2>Supported Formats</h2>
-      <p>Implemented: RIFF/WAVE with PCM signed 16-bit little-endian audio and PCM unsigned 8-bit audio, mono or stereo; MP3 frame-header metadata; FLAC STREAMINFO metadata; Ogg/Opus and Ogg/Vorbis header metadata; MP4/MOV track metadata for H.264 video and AAC audio; IVF metadata for VP8, VP9, and AV1 video; binary PBM, PGM, and PPM image metadata.</p>
+      <p>Implemented: RIFF/WAVE with PCM signed 16-bit little-endian audio and PCM unsigned 8-bit audio, mono or stereo; MP3 frame-header metadata; FLAC STREAMINFO metadata; Ogg/Opus and Ogg/Vorbis header metadata; MP4/MOV track metadata for H.264 video and AAC audio; raw Annex B H.264 SPS metadata; IVF metadata for VP8, VP9, and AV1 video; binary PBM, PGM, and PPM image metadata.</p>
       <p>Not implemented: MP3 decode, FLAC decode, Opus decode, Vorbis decode, AAC decode, H.264 decode, VP8 decode, VP9 decode, AV1 decode, image decode, filters, seeking, resampling, remuxing, and most codec/container behavior.</p>
 
       <h2>Known Failures</h2>

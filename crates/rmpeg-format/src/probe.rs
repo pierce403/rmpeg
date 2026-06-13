@@ -3,6 +3,7 @@ use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 use crate::{
     aac::{looks_like_adts_aac, parse_adts_aac},
     flac::parse_flac,
+    h264::{looks_like_h264_annex_b, parse_h264_annex_b},
     ivf::parse_ivf,
     mp3::parse_mp3,
     mp4::parse_mp4,
@@ -41,6 +42,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"DKIF") {
         return parse_ivf(bytes);
+    }
+
+    if looks_like_h264_annex_b(bytes) {
+        return parse_h264_annex_b(bytes);
     }
 
     if looks_like_binary_pnm(bytes) {

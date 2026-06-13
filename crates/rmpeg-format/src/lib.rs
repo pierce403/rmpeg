@@ -1,5 +1,6 @@
 pub mod aac;
 pub mod flac;
+pub mod h264;
 pub mod ivf;
 pub mod mp3;
 pub mod mp4;
@@ -10,6 +11,7 @@ pub mod wav;
 
 pub use aac::parse_adts_aac;
 pub use flac::parse_flac;
+pub use h264::parse_h264_annex_b;
 pub use ivf::parse_ivf;
 pub use mp3::parse_mp3;
 pub use mp4::parse_mp4;
