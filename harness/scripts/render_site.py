@@ -2,6 +2,8 @@
 import html
 import json
 import shutil
+import struct
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +23,7 @@ def main():
     rendered = TEMPLATE.read_text()
     replacements = {
         "generated_at": escape(correctness.get("generated_at", "unknown")),
+        "og_description": escape(phase_description(upstream_samples)),
         "current_status": render_current_status(correctness),
         "phase_progress": render_phase_progress(upstream_samples),
         "correctness": render_correctness(correctness),
@@ -34,6 +37,7 @@ def main():
     DIST.mkdir(parents=True, exist_ok=True)
     (DIST / "index.html").write_text(rendered)
     copy_static_files()
+    write_og_card(DIST / "og-card.png", upstream_samples)
     print(f"wrote {DIST / 'index.html'}")
 
 
@@ -87,14 +91,12 @@ def render_current_status(correctness):
 
 
 def render_phase_progress(report):
-    tests = report.get("tests", [])
+    stats = phase_stats(report)
+    media_total = stats["media_total"]
+    media_passed = stats["media_passed"]
+    percent = stats["percent"]
     summary = report.get("summary", {})
-    media_total = sum(1 for test in tests if test.get("ffprobe_returncode") == 0)
-    media_passed = sum(
-        1
-        for test in tests
-        if test.get("ffprobe_returncode") == 0 and test.get("status") == "passed"
-    )
+    tests = report.get("tests", [])
     if media_total == 0:
         return (
             '<section class="phase-panel" aria-labelledby="phase-1-title">'
@@ -105,7 +107,6 @@ def render_phase_progress(report):
             "</div></div></section>"
         )
 
-    percent = media_passed / media_total * 100
     total_files = int(summary.get("total", len(tests)) or 0)
     ffprobe_accepted = int(summary.get("ffprobe_accepted", media_total) or 0)
     corpus_passed = int(summary.get("passed", 0) or 0)
@@ -130,6 +131,33 @@ def render_phase_progress(report):
         </div>
       </section>
     """
+
+
+def phase_description(report):
+    stats = phase_stats(report)
+    if stats["media_total"] == 0:
+        return "Phase 1: sample media progress has not been measured yet."
+    return (
+        f"Phase 1: rmpeg currently matches {stats['media_passed']} of "
+        f"{stats['media_total']} FFmpeg-accepted sample media files "
+        f"({stats['percent']:.1f}%)."
+    )
+
+
+def phase_stats(report):
+    tests = report.get("tests", [])
+    media_total = sum(1 for test in tests if test.get("ffprobe_returncode") == 0)
+    media_passed = sum(
+        1
+        for test in tests
+        if test.get("ffprobe_returncode") == 0 and test.get("status") == "passed"
+    )
+    percent = media_passed / media_total * 100 if media_total else 0.0
+    return {
+        "media_total": media_total,
+        "media_passed": media_passed,
+        "percent": percent,
+    }
 
 
 def status_row(label, tests, kind, prefix):
@@ -286,6 +314,154 @@ def seconds(value):
 
 def escape(value):
     return html.escape(str(value), quote=True)
+
+
+def write_og_card(path, report):
+    width = 1200
+    height = 630
+    background = (247, 247, 242)
+    ink = (23, 27, 31)
+    muted = (89, 96, 101)
+    green = (47, 111, 101)
+    track = (226, 227, 219)
+    border = (199, 203, 194)
+    pixels = bytearray(background * (width * height))
+
+    stats = phase_stats(report)
+    media_total = stats["media_total"]
+    media_passed = stats["media_passed"]
+    percent = stats["percent"]
+
+    draw_text(pixels, width, height, 80, 72, "RMPEG", 13, ink)
+    draw_text(pixels, width, height, 84, 178, "PHASE 1", 6, green)
+    draw_text(pixels, width, height, 80, 246, "SAMPLE MEDIA PROGRESS", 7, ink)
+    if media_total:
+        draw_text(pixels, width, height, 80, 338, f"{percent:.1f}%", 13, green)
+        metric = f"{media_passed} / {media_total} MEDIA FILES"
+    else:
+        draw_text(pixels, width, height, 80, 338, "NO DATA", 13, green)
+        metric = "RUN CARGO XTASK FFMPEG SAMPLES"
+
+    bar_x = 80
+    bar_y = 478
+    bar_width = 1040
+    bar_height = 56
+    fill_rect(pixels, width, height, bar_x, bar_y, bar_width, bar_height, border)
+    fill_rect(
+        pixels,
+        width,
+        height,
+        bar_x + 4,
+        bar_y + 4,
+        bar_width - 8,
+        bar_height - 8,
+        track,
+    )
+    fill_width = round((bar_width - 8) * percent / 100)
+    if fill_width > 0:
+        fill_rect(pixels, width, height, bar_x + 4, bar_y + 4, fill_width, bar_height - 8, green)
+
+    draw_text(pixels, width, height, 82, 558, metric, 5, muted)
+    write_png(path, width, height, pixels)
+
+
+FONT = {
+    " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
+    "%": ["11001", "11010", "00100", "01000", "10110", "00110", "00000"],
+    ".": ["00000", "00000", "00000", "00000", "00000", "01100", "01100"],
+    "/": ["00001", "00010", "00100", "01000", "10000", "00000", "00000"],
+    "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+    "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+    "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+    "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+    "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+    "5": ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
+    "6": ["00110", "01000", "10000", "11110", "10001", "10001", "01110"],
+    "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+    "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+    "9": ["01110", "10001", "10001", "01111", "00001", "00010", "01100"],
+    "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "C": ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+    "D": ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+    "E": ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+    "F": ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+    "G": ["01111", "10000", "10000", "10111", "10001", "10001", "01111"],
+    "H": ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "I": ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+    "K": ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+    "L": ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+    "M": ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+    "N": ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+    "O": ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "P": ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+    "R": ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+    "S": ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+    "T": ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+    "U": ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "X": ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
+    "Y": ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+}
+
+
+def draw_text(pixels, width, height, x, y, text, scale, color):
+    cursor = x
+    for char in text.upper():
+        glyph = FONT.get(char, FONT[" "])
+        for row, bits in enumerate(glyph):
+            for col, bit in enumerate(bits):
+                if bit == "1":
+                    fill_rect(
+                        pixels,
+                        width,
+                        height,
+                        cursor + col * scale,
+                        y + row * scale,
+                        scale,
+                        scale,
+                        color,
+                    )
+        cursor += 6 * scale
+
+
+def fill_rect(pixels, width, height, x, y, rect_width, rect_height, color):
+    x0 = max(0, int(x))
+    y0 = max(0, int(y))
+    x1 = min(width, int(x + rect_width))
+    y1 = min(height, int(y + rect_height))
+    if x0 >= x1 or y0 >= y1:
+        return
+    red, green, blue = color
+    for row in range(y0, y1):
+        offset = (row * width + x0) * 3
+        for _ in range(x0, x1):
+            pixels[offset] = red
+            pixels[offset + 1] = green
+            pixels[offset + 2] = blue
+            offset += 3
+
+
+def write_png(path, width, height, pixels):
+    stride = width * 3
+    raw = bytearray()
+    for row in range(height):
+        raw.append(0)
+        start = row * stride
+        raw.extend(pixels[start : start + stride])
+    payload = (
+        png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + png_chunk(b"IDAT", zlib.compress(bytes(raw), 9))
+        + png_chunk(b"IEND", b"")
+    )
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + payload)
+
+
+def png_chunk(kind, data):
+    return (
+        struct.pack(">I", len(data))
+        + kind
+        + data
+        + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+    )
 
 
 def copy_static_files():
