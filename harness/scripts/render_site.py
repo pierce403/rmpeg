@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import html
 import json
+import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = ROOT / "site" / "templates" / "index.html"
 DIST = ROOT / "site" / "dist"
+STATIC = ROOT / "site" / "static"
 CORRECTNESS = ROOT / "site" / "data" / "correctness.json"
 BENCH_SUMMARY = ROOT / "site" / "data" / "benchmark-summary.json"
 RUNS = ROOT / "agents" / "runs"
@@ -27,6 +29,7 @@ def main():
         rendered = rendered.replace("{{" + key + "}}", value)
     DIST.mkdir(parents=True, exist_ok=True)
     (DIST / "index.html").write_text(rendered)
+    copy_static_files()
     print(f"wrote {DIST / 'index.html'}")
 
 
@@ -169,6 +172,14 @@ def seconds(value):
 
 def escape(value):
     return html.escape(str(value), quote=True)
+
+
+def copy_static_files():
+    if not STATIC.exists():
+        return
+    for path in STATIC.iterdir():
+        if path.is_file() and path.name != ".gitkeep":
+            shutil.copy2(path, DIST / path.name)
 
 
 if __name__ == "__main__":
