@@ -29,6 +29,8 @@ Rules:
 - Prefer simple, slow, readable Rust over clever code.
 - Panics, timeouts, or nondeterminism count as failed experiments.
 - Make one focused implementation change for one failing mirrored test.
+- When you hit surprising FFmpeg behavior, corpus layout, parser ambiguity, version difference, or a harness trap, update `notes/unexpected-quirks.md` with a short factual note.
+- Notes must describe what was observed, how it was observed, and why it matters for rmpeg. Do not use notes to justify weakening a test.
 
 Required commands:
 

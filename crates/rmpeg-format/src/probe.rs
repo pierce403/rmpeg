@@ -1,6 +1,13 @@
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 
-use crate::{flac::parse_flac, mp3::parse_mp3, mp4::parse_mp4, ogg::parse_ogg, wav::parse_wav};
+use crate::{
+    aac::{looks_like_adts_aac, parse_adts_aac},
+    flac::parse_flac,
+    mp3::parse_mp3,
+    mp4::parse_mp4,
+    ogg::parse_ogg,
+    wav::parse_wav,
+};
 
 pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
     if bytes.starts_with(b"RIFF") {
@@ -16,6 +23,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
                 wav.metadata.duration_seconds,
             )],
         });
+    }
+
+    if looks_like_adts_aac(bytes) {
+        return parse_adts_aac(bytes);
     }
 
     if bytes.starts_with(b"ID3") || looks_like_mp3_frame(bytes) {
@@ -40,5 +51,16 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 }
 
 fn looks_like_mp3_frame(bytes: &[u8]) -> bool {
-    bytes.len() >= 2 && bytes[0] == 0xff && (bytes[1] & 0xe0) == 0xe0
+    if bytes.len() < 4 || bytes[0] != 0xff || (bytes[1] & 0xe0) != 0xe0 {
+        return false;
+    }
+    let version_id = (bytes[1] >> 3) & 0b11;
+    let layer = (bytes[1] >> 1) & 0b11;
+    let bitrate_index = (bytes[2] >> 4) & 0b1111;
+    let sample_rate_index = (bytes[2] >> 2) & 0b11;
+    version_id != 0b01
+        && layer == 0b01
+        && bitrate_index != 0
+        && bitrate_index != 15
+        && sample_rate_index != 0b11
 }

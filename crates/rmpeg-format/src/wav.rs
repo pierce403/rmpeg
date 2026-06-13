@@ -98,14 +98,18 @@ fn parse_fmt(bytes: &[u8]) -> Result<WavFmt> {
     }
 
     let mut reader = ByteReader::new(bytes);
-    Ok(WavFmt {
+    let mut fmt = WavFmt {
         audio_format: reader.read_u16_le()?,
         channels: reader.read_u16_le()?,
         sample_rate: reader.read_u32_le()?,
         byte_rate: reader.read_u32_le()?,
         block_align: reader.read_u16_le()?,
         bits_per_sample: reader.read_u16_le()?,
-    })
+    };
+    if fmt.audio_format == 0xfffe {
+        fmt.audio_format = parse_extensible_subformat(bytes)?;
+    }
+    Ok(fmt)
 }
 
 fn validate_pcm(fmt: WavFmt) -> Result<()> {
@@ -115,13 +119,13 @@ fn validate_pcm(fmt: WavFmt) -> Result<()> {
             fmt.audio_format
         )));
     }
-    if fmt.channels != 1 && fmt.channels != 2 {
+    if fmt.channels == 0 {
         return Err(RmpegError::Unsupported(format!(
             "WAV channel count {} is not supported",
             fmt.channels
         )));
     }
-    if fmt.bits_per_sample != 8 && fmt.bits_per_sample != 16 {
+    if !matches!(fmt.bits_per_sample, 8 | 16 | 24 | 32) {
         return Err(RmpegError::Unsupported(format!(
             "WAV bits per sample {} is not supported PCM",
             fmt.bits_per_sample
@@ -154,11 +158,39 @@ fn codec_name(bits_per_sample: u16) -> Result<&'static str> {
     match bits_per_sample {
         8 => Ok("pcm_u8"),
         16 => Ok("pcm_s16le"),
+        24 => Ok("pcm_s24le"),
+        32 => Ok("pcm_s32le"),
         other => Err(RmpegError::Unsupported(format!(
             "WAV bits per sample {other} is not supported PCM"
         ))),
     }
 }
+
+fn parse_extensible_subformat(bytes: &[u8]) -> Result<u16> {
+    if bytes.len() < 40 {
+        return Err(RmpegError::UnexpectedEof {
+            needed: 40,
+            remaining: bytes.len(),
+        });
+    }
+    let cb_size = u16::from_le_bytes([bytes[16], bytes[17]]);
+    if cb_size < 22 {
+        return Err(RmpegError::UnexpectedEof {
+            needed: 40,
+            remaining: bytes.len(),
+        });
+    }
+    if bytes[26..40] != PCM_SUBFORMAT_GUID_TAIL {
+        return Err(RmpegError::Unsupported(
+            "WAV extensible subformat is not PCM".to_string(),
+        ));
+    }
+    Ok(u16::from_le_bytes([bytes[24], bytes[25]]))
+}
+
+const PCM_SUBFORMAT_GUID_TAIL: [u8; 14] = [
+    0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71,
+];
 
 #[cfg(test)]
 mod tests {
@@ -193,6 +225,39 @@ mod tests {
         bytes
     }
 
+    fn extensible_pcm_wav_24bit() -> Vec<u8> {
+        let channels = 2_u16;
+        let sample_rate = 96_000_u32;
+        let bits_per_sample = 24_u16;
+        let block_align = channels * 3;
+        let byte_rate = sample_rate * u32::from(block_align);
+        let data = [0_u8; 6];
+        let fmt_size = 40_u32;
+        let riff_size = 4 + (8 + fmt_size) + (8 + data.len() as u32);
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&riff_size.to_le_bytes());
+        bytes.extend_from_slice(b"WAVE");
+        bytes.extend_from_slice(b"fmt ");
+        bytes.extend_from_slice(&fmt_size.to_le_bytes());
+        bytes.extend_from_slice(&0xfffe_u16.to_le_bytes());
+        bytes.extend_from_slice(&channels.to_le_bytes());
+        bytes.extend_from_slice(&sample_rate.to_le_bytes());
+        bytes.extend_from_slice(&byte_rate.to_le_bytes());
+        bytes.extend_from_slice(&block_align.to_le_bytes());
+        bytes.extend_from_slice(&bits_per_sample.to_le_bytes());
+        bytes.extend_from_slice(&22_u16.to_le_bytes());
+        bytes.extend_from_slice(&bits_per_sample.to_le_bytes());
+        bytes.extend_from_slice(&3_u32.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        bytes.extend_from_slice(&PCM_SUBFORMAT_GUID_TAIL);
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&data);
+        bytes
+    }
+
     #[test]
     fn parses_minimal_pcm_s16le() {
         let bytes = minimal_wav(&[0, 1, -1, 2], 2, 44_100);
@@ -208,5 +273,15 @@ mod tests {
         let err =
             parse_wav(b"RIFF\x10\x00\x00\x00WAVEfmt \x10\x00\x00\x00").expect_err("truncated wav");
         assert!(err.to_string().contains("unexpected end"));
+    }
+
+    #[test]
+    fn parses_extensible_pcm_subformat() {
+        let wav = parse_wav(&extensible_pcm_wav_24bit()).expect("valid extensible pcm wav");
+        assert_eq!(wav.metadata.codec_name, "pcm_s24le");
+        assert_eq!(wav.metadata.channels, 2);
+        assert_eq!(wav.metadata.sample_rate, 96_000);
+        assert_eq!(wav.metadata.bits_per_sample, 24);
+        assert_eq!(wav.data_size, 6);
     }
 }
