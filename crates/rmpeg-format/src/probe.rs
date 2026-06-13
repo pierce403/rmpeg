@@ -2,6 +2,7 @@ use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 
 use crate::{
     aac::{looks_like_adts_aac, parse_adts_aac},
+    bmp::{looks_like_bmp, parse_bmp},
     dds::parse_dds,
     flac::parse_flac,
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
@@ -9,6 +10,7 @@ use crate::{
     mp3::parse_mp3,
     mp4::parse_mp4,
     ogg::parse_ogg,
+    png::{looks_like_png, parse_png},
     pnm::{looks_like_binary_pnm, parse_pnm},
     wav::parse_wav,
 };
@@ -43,6 +45,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"DDS ") {
         return parse_dds(bytes);
+    }
+
+    if looks_like_png(bytes) {
+        return parse_png(bytes);
+    }
+
+    if looks_like_bmp(bytes) {
+        return parse_bmp(bytes);
     }
 
     if bytes.starts_with(b"DKIF") {

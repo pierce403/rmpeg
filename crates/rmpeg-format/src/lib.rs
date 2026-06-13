@@ -1,4 +1,5 @@
 pub mod aac;
+pub mod bmp;
 pub mod dds;
 pub mod flac;
 pub mod h264;
@@ -6,11 +7,13 @@ pub mod ivf;
 pub mod mp3;
 pub mod mp4;
 pub mod ogg;
+pub mod png;
 pub mod pnm;
 pub mod probe;
 pub mod wav;
 
 pub use aac::parse_adts_aac;
+pub use bmp::parse_bmp;
 pub use dds::parse_dds;
 pub use flac::parse_flac;
 pub use h264::parse_h264_annex_b;
@@ -18,6 +21,7 @@ pub use ivf::parse_ivf;
 pub use mp3::parse_mp3;
 pub use mp4::parse_mp4;
 pub use ogg::parse_ogg;
+pub use png::parse_png;
 pub use pnm::parse_pnm;
 pub use probe::probe;
 pub use wav::{parse_wav, WavFile};
