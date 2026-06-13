@@ -18,8 +18,9 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - IVF metadata probing for VP8, VP9, and AV1 video
 - raw Annex B H.264 SPS metadata probing
 - binary PNM image metadata probing for PBM, PGM, and PPM files
+- DDS image metadata probing
 
-Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, H.264, VP8, VP9, AV1, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, H.264, VP8, VP9, AV1, DDS, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
