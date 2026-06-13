@@ -10,6 +10,7 @@ pub mod ogg;
 pub mod png;
 pub mod pnm;
 pub mod probe;
+pub mod sgi;
 pub mod wav;
 
 pub use aac::parse_adts_aac;
@@ -24,4 +25,5 @@ pub use ogg::parse_ogg;
 pub use png::parse_png;
 pub use pnm::parse_pnm;
 pub use probe::probe;
+pub use sgi::parse_sgi;
 pub use wav::{parse_wav, WavFile};

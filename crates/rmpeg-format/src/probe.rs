@@ -12,6 +12,7 @@ use crate::{
     ogg::parse_ogg,
     png::{looks_like_png, parse_png},
     pnm::{looks_like_binary_pnm, parse_pnm},
+    sgi::{looks_like_sgi, parse_sgi},
     wav::parse_wav,
 };
 
@@ -53,6 +54,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_bmp(bytes) {
         return parse_bmp(bytes);
+    }
+
+    if looks_like_sgi(bytes) {
+        return parse_sgi(bytes);
     }
 
     if bytes.starts_with(b"DKIF") {
