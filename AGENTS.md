@@ -154,6 +154,26 @@ Do not hardcode a specific external agent vendor. Use `AGENT_CMD`:
 AGENT_CMD="codex exec --full-auto agents/program.md" python3 agents/autoresearch.py
 ```
 
+For a corpus-metric attempt, prefer `./autoslop.sh`. It uses
+`agents/autoslop.md`, requires a clean tree, auto-detects `codex`, `claude`, or
+`aider` when `AGENT_CMD` is not set, and keeps a change only when the Phase 1
+strict-media metric improves enough without protected path edits, corpus errors,
+new false accepts, or mirrored-score regression. It is intentionally one-shot,
+not an infinite loop.
+
+Useful invocations:
+
+```bash
+AGENT_CMD="codex exec --full-auto agents/autoslop.md" ./autoslop.sh
+AUTOSLOP_MIN_PERCENT_GAIN=0 AUTOSLOP_MIN_STRICT_GAIN=1 ./autoslop.sh
+AUTOSLOP_PUSH=1 ./autoslop.sh
+```
+
+For PR maintenance, use `./automerge.sh` to inspect open pull requests. It is
+dry-run by default and requires `./automerge.sh --apply` before merging. The
+default policy requires a non-draft PR, an approving review, passing checks,
+merge state `CLEAN` or `HAS_HOOKS`, and no protected-path edits.
+
 ## Current High-Value Work
 
 Good Phase 1 targets are clusters where ffprobe accepts many files and rmpeg

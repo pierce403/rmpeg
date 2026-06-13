@@ -125,6 +125,17 @@ RMPEG_FFMPEG_SAMPLE_LIMIT=100 cargo xtask ffmpeg-samples-check
 
 Do not use a limited run as proof of a Phase 1 percentage gain.
 
+## Automation
+
+`./autoslop.sh` runs one guarded autonomous improvement attempt. It is allowed to
+keep a commit only when Phase 1 strict media progress improves, protected paths
+stay untouched, the mirrored score does not regress, corpus errors remain zero,
+and false accepts do not increase.
+
+`./automerge.sh` reviews open pull requests through `gh`. It is dry-run by
+default; use `./automerge.sh --apply` to merge PRs that satisfy the conservative
+policy.
+
 ## Contribution Shape
 
 Good changes are small and measurable:

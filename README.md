@@ -131,6 +131,47 @@ The autoresearch driver:
 
 Forbidden paths include generated FFmpeg references, comparison scripts, scoring logic, CI workflows, and generated site data.
 
+## Autoslop
+
+Run one autonomous Phase 1 improvement attempt with corpus guardrails:
+
+```bash
+AGENT_CMD="codex exec --full-auto agents/autoslop.md" ./autoslop.sh
+```
+
+If `AGENT_CMD` is unset, `autoslop.sh` tries installed local harnesses in this order:
+`codex`, `claude`, then `aider`.
+
+`autoslop.sh` requires a clean working tree, records the baseline strict media
+match count, runs one agent attempt, reruns the local gate, blocks protected
+path edits, and keeps the attempt only if strict media progress improves without
+new corpus errors, new false accepts, or mirrored-score regression. By default
+it requires at least a 1.0 absolute percentage point Phase 1 gain. Override with:
+
+```bash
+AUTOSLOP_MIN_PERCENT_GAIN=0 AUTOSLOP_MIN_STRICT_GAIN=1 ./autoslop.sh
+```
+
+Set `AUTOSLOP_PUSH=1` to push a kept commit to `origin/main`.
+
+## Automerge
+
+Preview pull requests that look safe to merge:
+
+```bash
+./automerge.sh
+```
+
+Actually merge candidates:
+
+```bash
+./automerge.sh --apply
+```
+
+The script uses `gh`, requires passing checks and an approving review by default,
+skips draft or blocked PRs, and refuses protected-path changes unless
+`AUTOMERGE_ALLOW_PROTECTED=1` is set.
+
 ## Current Result
 
 The current mirrored suite has 24 tests:
