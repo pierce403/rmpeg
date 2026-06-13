@@ -1,7 +1,7 @@
 use std::{env, fs, process};
 
-use rmpeg_core::{Result, RmpegError};
-use rmpeg_format::parse_wav;
+use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
+use rmpeg_format::probe;
 
 fn main() {
     if let Err(error) = run() {
@@ -22,23 +22,63 @@ fn run() -> Result<()> {
     }
 
     let input = fs::read(&path)?;
-    let wav = parse_wav(&input)?;
-    let stream = wav.metadata;
-
-    println!("{{");
-    println!("  \"format\": \"wav\",");
-    println!("  \"streams\": [");
-    println!("    {{");
-    println!("      \"index\": {},", stream.index);
-    println!("      \"codec_type\": \"{}\",", stream.codec_type);
-    println!("      \"codec_name\": \"{}\",", stream.codec_name);
-    println!("      \"sample_rate\": {},", stream.sample_rate);
-    println!("      \"channels\": {},", stream.channels);
-    println!("      \"bits_per_sample\": {},", stream.bits_per_sample);
-    println!("      \"duration_seconds\": {:.6}", stream.duration_seconds);
-    println!("    }}");
-    println!("  ]");
-    println!("}}");
+    print_probe_json(&probe(&input)?);
 
     Ok(())
+}
+
+fn print_probe_json(document: &ProbeDocument) {
+    println!("{{");
+    println!("  \"format\": \"{}\",", escape_json(&document.format));
+    println!("  \"streams\": [");
+    for (index, stream) in document.streams.iter().enumerate() {
+        print_stream(stream, index + 1 == document.streams.len());
+    }
+    println!("  ]");
+    println!("}}");
+}
+
+fn print_stream(stream: &StreamMetadata, is_last: bool) {
+    let mut fields = Vec::new();
+    fields.push(format!("\"index\": {}", stream.index));
+    fields.push(format!(
+        "\"codec_type\": \"{}\"",
+        escape_json(&stream.codec_type)
+    ));
+    fields.push(format!(
+        "\"codec_name\": \"{}\"",
+        escape_json(&stream.codec_name)
+    ));
+    if let Some(sample_rate) = stream.sample_rate {
+        fields.push(format!("\"sample_rate\": {sample_rate}"));
+    }
+    if let Some(channels) = stream.channels {
+        fields.push(format!("\"channels\": {channels}"));
+    }
+    if let Some(bits_per_sample) = stream.bits_per_sample {
+        fields.push(format!("\"bits_per_sample\": {bits_per_sample}"));
+    }
+    if let Some(duration_seconds) = stream.duration_seconds {
+        fields.push(format!("\"duration_seconds\": {duration_seconds:.6}"));
+    }
+    if let Some(width) = stream.width {
+        fields.push(format!("\"width\": {width}"));
+    }
+    if let Some(height) = stream.height {
+        fields.push(format!("\"height\": {height}"));
+    }
+    if let Some(frame_rate) = &stream.frame_rate {
+        fields.push(format!("\"frame_rate\": \"{}\"", escape_json(frame_rate)));
+    }
+
+    println!("    {{");
+    for (index, field) in fields.iter().enumerate() {
+        let comma = if index + 1 == fields.len() { "" } else { "," };
+        println!("      {field}{comma}");
+    }
+    println!("    }}{}", if is_last { "" } else { "," });
+}
+
+fn escape_json(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }

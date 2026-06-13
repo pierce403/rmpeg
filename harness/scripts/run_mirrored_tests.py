@@ -39,9 +39,12 @@ def generate_reference():
     if not samples:
         raise SystemExit(f"no samples found in {SAMPLES}; run cargo xtask samples first")
     REFERENCE.mkdir(parents=True, exist_ok=True)
+    for path in REFERENCE.glob("*.json"):
+        path.unlink()
     for sample in samples:
         write_probe_reference(sample)
-        write_framemd5_reference(sample)
+        if decode_supported(sample):
+            write_framemd5_reference(sample)
     print(f"generated references in {REFERENCE}")
     return 0
 
@@ -52,11 +55,28 @@ def require_tool(name):
 
 
 def sample_paths():
-    return sorted(path for path in SAMPLES.glob("*.wav") if path.is_file())
+    paths = []
+    for pattern in ("*.wav", "*.mp3", "*.mp4"):
+        paths.extend(path for path in SAMPLES.glob(pattern) if path.is_file())
+    return sorted(paths)
 
 
 def stem(path):
-    return path.name.replace(".wav", "")
+    return path.stem
+
+
+def sample_format(path):
+    if path.suffix == ".wav":
+        return "wav"
+    if path.suffix == ".mp3":
+        return "mp3"
+    if path.suffix == ".mp4":
+        return "mp4"
+    return path.suffix.lstrip(".") or "unknown"
+
+
+def decode_supported(path):
+    return path.suffix == ".wav"
 
 
 def write_json(path, document):
@@ -193,7 +213,16 @@ def run_tests(rmpeg_probe, rmpeg, output_path):
         )
     for sample in samples:
         tests.append(run_probe_test(rmpeg_probe, sample))
-        tests.append(run_framemd5_test(rmpeg, sample))
+        if decode_supported(sample):
+            tests.append(run_framemd5_test(rmpeg, sample))
+        else:
+            tests.append(
+                skipped(
+                    f"decode/hash {sample_format(sample)} {stem(sample)}",
+                    "framemd5",
+                    "compressed decode/hash is not implemented",
+                )
+            )
 
     document = {
         "generated_at": now(),
@@ -209,7 +238,7 @@ def run_tests(rmpeg_probe, rmpeg, output_path):
 
 
 def run_probe_test(rmpeg_probe, sample):
-    name = f"probe wav {stem(sample)}"
+    name = f"probe {sample_format(sample)} {stem(sample)}"
     ref_path = REFERENCE / f"{stem(sample)}.probe.json"
     if not ref_path.exists():
         return skipped(name, "probe-json", f"missing reference {ref_path}")
@@ -236,7 +265,7 @@ def run_probe_test(rmpeg_probe, sample):
 
 
 def run_framemd5_test(rmpeg, sample):
-    name = f"decode/hash wav {stem(sample)}"
+    name = f"decode/hash {sample_format(sample)} {stem(sample)}"
     ref_path = REFERENCE / f"{stem(sample)}.framemd5.json"
     if not ref_path.exists():
         return skipped(name, "framemd5", f"missing reference {ref_path}")

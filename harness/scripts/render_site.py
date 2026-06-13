@@ -55,22 +55,33 @@ def empty_benchmarks():
 
 def render_current_status(correctness):
     tests = correctness.get("tests", [])
-    probe = [test for test in tests if test.get("kind") == "probe-json"]
-    decode = [test for test in tests if test.get("kind") == "framemd5"]
     rows = [
-        ("WAV/PCM metadata", ratio(probe), status_class(probe)),
-        ("WAV/PCM decode/hash", ratio(decode), status_class(decode)),
-        ("MP3", "not started", "not-started"),
-        ("MP4/MOV", "not started", "not-started"),
-        ("H.264", "not started", "not-started"),
+        status_row("WAV/PCM metadata", tests, "probe-json", "probe wav"),
+        status_row("WAV/PCM decode/hash", tests, "framemd5", "decode/hash wav"),
+        status_row("MP3 metadata", tests, "probe-json", "probe mp3"),
+        status_row("MP3 decode/hash", tests, "framemd5", "decode/hash mp3"),
+        status_row("MP4/MOV metadata", tests, "probe-json", "probe mp4"),
+        status_row("H.264/AAC metadata", tests, "probe-json", "probe mp4"),
+        status_row("H.264/AAC decode/hash", tests, "framemd5", "decode/hash mp4"),
         ("Filters", "not started", "not-started"),
     ]
     return table(["Area", "Status"], rows)
 
 
+def status_row(label, tests, kind, prefix):
+    selected = [
+        test
+        for test in tests
+        if test.get("kind") == kind and test.get("name", "").startswith(prefix)
+    ]
+    return (label, ratio(selected), status_class(selected))
+
+
 def ratio(tests):
     if not tests:
-        return "0/0"
+        return "not started"
+    if all(test.get("status") == "skipped" for test in tests):
+        return "not implemented"
     passed = sum(1 for test in tests if test.get("status") == "passed")
     return f"{passed}/{len(tests)} passing"
 
@@ -78,6 +89,10 @@ def ratio(tests):
 def status_class(tests):
     if not tests:
         return "not-started"
+    if all(test.get("status") == "skipped" for test in tests):
+        return "not-started"
+    if any(test.get("status") in {"failed", "error"} for test in tests):
+        return "failed"
     if all(test.get("status") == "passed" for test in tests):
         return "passed"
     return "failed"
@@ -123,7 +138,7 @@ def render_known_failures(correctness):
         if test.get("status") in {"failed", "error", "skipped"}
     ]
     if not failures:
-        return "<p>No mirrored failures in the current WAV/PCM slice. Other formats are not implemented.</p>"
+        return "<p>No mirrored failures in the current slice. Unimplemented decode paths are reported as skipped.</p>"
     items = []
     for test in failures:
         items.append(

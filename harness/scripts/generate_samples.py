@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import math
+import shutil
 import struct
+import subprocess
 import wave
 from pathlib import Path
 
@@ -65,6 +67,7 @@ def write_odd_chunks(path):
 
 def main():
     SAMPLES.mkdir(parents=True, exist_ok=True)
+    clean_generated_samples()
     write_pcm16(SAMPLES / "mono_silence_8k.wav", 8000, 1, 8000, lambda _i, _ch: 0)
     write_pcm16(
         SAMPLES / "stereo_44k_sine.wav",
@@ -88,9 +91,78 @@ def main():
         lambda i, _ch: math.sin(2 * math.pi * 440 * i / 8000) * 9000,
     )
     write_odd_chunks(SAMPLES / "odd_chunks.wav")
-    write_pcm_u8(SAMPLES / "unsupported_pcm_u8.wav", 8000, 1, 800)
+    write_pcm_u8(SAMPLES / "pcm_u8.wav", 8000, 1, 800)
     (SAMPLES / "truncated_riff.wav").write_bytes(b"RIFF\x08\x00\x00\x00WAVEfmt ")
+    write_compressed_samples()
     print(f"generated samples in {SAMPLES}")
+
+
+def clean_generated_samples():
+    for pattern in ("*.wav", "*.mp3", "*.mp4"):
+        for path in SAMPLES.glob(pattern):
+            path.unlink()
+
+
+def write_compressed_samples():
+    if shutil.which("ffmpeg") is None:
+        raise SystemExit("required tool missing for compressed samples: ffmpeg")
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=44100:duration=1",
+            "-ac",
+            "2",
+            "-codec:a",
+            "libmp3lame",
+            "-b:a",
+            "96k",
+            "-write_xing",
+            "0",
+            str(SAMPLES / "tone_mp3.mp3"),
+        ]
+    )
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=64x48:rate=10:duration=1",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=660:sample_rate=44100:duration=1",
+            "-shortest",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-preset",
+            "ultrafast",
+            "-tune",
+            "zerolatency",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "64k",
+            "-movflags",
+            "+faststart",
+            str(SAMPLES / "h264_aac_mp4.mp4"),
+        ]
+    )
+
+
+def run(args):
+    subprocess.run(args, check=True)
 
 
 if __name__ == "__main__":

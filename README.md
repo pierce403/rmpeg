@@ -2,7 +2,7 @@
 
 rmpeg is an experimental Rust media stack grown by differential testing against FFmpeg.
 
-It is not FFmpeg-compatible yet. The MVP only supports a narrow WAV/PCM vertical slice:
+It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 
 - RIFF/WAVE header parsing
 - `fmt ` and `data` chunk discovery
@@ -11,6 +11,10 @@ It is not FFmpeg-compatible yet. The MVP only supports a narrow WAV/PCM vertical
 - mono and stereo
 - sample rate, channels, bits per sample, data size, and duration estimate
 - a framemd5-like decode/hash path for PCM data
+- MP3 frame-header metadata probing
+- MP4/MOV track metadata probing for H.264 video and AAC audio
+
+Compressed decode is not implemented yet. MP3, AAC, and H.264 support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
@@ -90,11 +94,12 @@ Forbidden paths include generated FFmpeg references, comparison scripts, scoring
 
 ## Current Result
 
-The current WAV mirrored suite has 14 tests:
+The current mirrored suite has 18 tests:
 
-- 7 probe tests
+- 9 probe tests
 - 7 decode/hash tests
-- all passing against local FFmpeg references
+- 2 skipped compressed decode/hash tests
+- no failing tests against local FFmpeg references
 
 ## Required Tools
 

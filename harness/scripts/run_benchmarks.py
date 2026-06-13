@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SAMPLE = ROOT / "harness" / "samples" / "tiny.wav"
+TINY_WAV = ROOT / "harness" / "samples" / "tiny.wav"
+TONE_MP3 = ROOT / "harness" / "samples" / "tone_mp3.mp3"
+H264_AAC_MP4 = ROOT / "harness" / "samples" / "h264_aac_mp4.mp4"
 BENCHMARKS = ROOT / "site" / "data" / "benchmarks.json"
 SUMMARY = ROOT / "site" / "data" / "benchmark-summary.json"
 
@@ -16,8 +18,9 @@ def main():
     require_tool("hyperfine")
     require_tool("ffprobe")
     require_tool("ffmpeg")
-    if not SAMPLE.exists():
-        raise SystemExit(f"missing {SAMPLE}; run cargo xtask samples first")
+    for sample in (TINY_WAV, TONE_MP3, H264_AAC_MP4):
+        if not sample.exists():
+            raise SystemExit(f"missing {sample}; run cargo xtask samples first")
 
     BENCHMARKS.parent.mkdir(parents=True, exist_ok=True)
     rmpeg_probe = ROOT / "target" / "release" / "rmpeg-probe"
@@ -26,10 +29,14 @@ def main():
         raise SystemExit("missing release binaries; cargo xtask bench should build them first")
 
     commands = [
-        ("ffprobe probe tiny wav", f"ffprobe -v error -show_format -show_streams -of json {SAMPLE}"),
-        ("rmpeg-probe probe tiny wav", f"{rmpeg_probe} {SAMPLE}"),
-        ("ffmpeg framemd5 tiny wav", f"ffmpeg -v error -i {SAMPLE} -f framemd5 -"),
-        ("rmpeg framemd5 tiny wav", f"{rmpeg} decode {SAMPLE} --framemd5"),
+        ("ffprobe probe tiny wav", f"ffprobe -v error -show_format -show_streams -of json {TINY_WAV}"),
+        ("rmpeg-probe probe tiny wav", f"{rmpeg_probe} {TINY_WAV}"),
+        ("ffprobe probe tone mp3", f"ffprobe -v error -show_format -show_streams -of json {TONE_MP3}"),
+        ("rmpeg-probe probe tone mp3", f"{rmpeg_probe} {TONE_MP3}"),
+        ("ffprobe probe h264 aac mp4", f"ffprobe -v error -show_format -show_streams -of json {H264_AAC_MP4}"),
+        ("rmpeg-probe probe h264 aac mp4", f"{rmpeg_probe} {H264_AAC_MP4}"),
+        ("ffmpeg framemd5 tiny wav", f"ffmpeg -v error -i {TINY_WAV} -f framemd5 -"),
+        ("rmpeg framemd5 tiny wav", f"{rmpeg} decode {TINY_WAV} --framemd5"),
     ]
     args = ["hyperfine", "--warmup", "1", "--min-runs", "3", "--export-json", str(BENCHMARKS)]
     for name, _command in commands:
@@ -65,9 +72,23 @@ def write_summary(commands):
     )
     benchmarks.append(
         summarize_pair(
+            "probe tone mp3",
+            by_name.get("ffprobe probe tone mp3") or by_command[commands[2][1]],
+            by_name.get("rmpeg-probe probe tone mp3") or by_command[commands[3][1]],
+        )
+    )
+    benchmarks.append(
+        summarize_pair(
+            "probe h264/aac mp4",
+            by_name.get("ffprobe probe h264 aac mp4") or by_command[commands[4][1]],
+            by_name.get("rmpeg-probe probe h264 aac mp4") or by_command[commands[5][1]],
+        )
+    )
+    benchmarks.append(
+        summarize_pair(
             "framemd5 tiny wav",
-            by_name.get("ffmpeg framemd5 tiny wav") or by_command[commands[2][1]],
-            by_name.get("rmpeg framemd5 tiny wav") or by_command[commands[3][1]],
+            by_name.get("ffmpeg framemd5 tiny wav") or by_command[commands[6][1]],
+            by_name.get("rmpeg framemd5 tiny wav") or by_command[commands[7][1]],
         )
     )
     SUMMARY.write_text(

@@ -19,6 +19,72 @@ impl Rational {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ProbeDocument {
+    pub format: String,
+    pub streams: Vec<StreamMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StreamMetadata {
+    pub index: usize,
+    pub codec_type: String,
+    pub codec_name: String,
+    pub sample_rate: Option<u32>,
+    pub channels: Option<u16>,
+    pub bits_per_sample: Option<u16>,
+    pub duration_seconds: Option<f64>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub frame_rate: Option<String>,
+}
+
+impl StreamMetadata {
+    pub fn audio(
+        index: usize,
+        codec_name: impl Into<String>,
+        sample_rate: u32,
+        channels: u16,
+        bits_per_sample: u16,
+        duration_seconds: f64,
+    ) -> Self {
+        Self {
+            index,
+            codec_type: "audio".to_string(),
+            codec_name: codec_name.into(),
+            sample_rate: Some(sample_rate),
+            channels: Some(channels),
+            bits_per_sample: Some(bits_per_sample),
+            duration_seconds: Some(duration_seconds),
+            width: None,
+            height: None,
+            frame_rate: None,
+        }
+    }
+
+    pub fn video(
+        index: usize,
+        codec_name: impl Into<String>,
+        width: u32,
+        height: u32,
+        duration_seconds: Option<f64>,
+        frame_rate: Option<String>,
+    ) -> Self {
+        Self {
+            index,
+            codec_type: "video".to_string(),
+            codec_name: codec_name.into(),
+            sample_rate: None,
+            channels: None,
+            bits_per_sample: None,
+            duration_seconds,
+            width: Some(width),
+            height: Some(height),
+            frame_rate,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AudioStreamMetadata {
     pub index: usize,
     pub codec_type: String,

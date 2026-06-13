@@ -1,5 +1,7 @@
 /target/
 /harness/samples/*.wav
+/harness/samples/*.mp3
+/harness/samples/*.mp4
 /harness/reference/*
 !/harness/reference/.gitkeep
 !/harness/samples/.gitkeep
