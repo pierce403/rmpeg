@@ -21,8 +21,12 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - DDS image metadata probing
 - PNG, APNG, and BMP image metadata probing
 - SGI image metadata probing
+- PSD image metadata probing
+- JPEG/MJPEG image metadata probing
+- WebP image metadata probing
+- Sun Raster image metadata probing
 
-Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, H.264, VP8, VP9, AV1, DDS, PNG/APNG, BMP, SGI, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, H.264, VP8, VP9, AV1, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 

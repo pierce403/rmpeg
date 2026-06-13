@@ -7,17 +7,21 @@ use crate::{
     flac::parse_flac,
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
     ivf::parse_ivf,
+    jpeg::{looks_like_jpeg, parse_jpeg},
     mp3::parse_mp3,
     mp4::parse_mp4,
     ogg::parse_ogg,
     png::{looks_like_png, parse_png},
     pnm::{looks_like_binary_pnm, parse_pnm},
+    psd::{looks_like_psd, parse_psd},
     sgi::{looks_like_sgi, parse_sgi},
+    sunrast::{looks_like_sunrast, parse_sunrast},
     wav::parse_wav,
+    webp::{looks_like_webp, parse_webp},
 };
 
 pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
-    if bytes.starts_with(b"RIFF") {
+    if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WAVE" {
         let wav = parse_wav(bytes)?;
         return Ok(ProbeDocument {
             format: "wav".to_string(),
@@ -44,6 +48,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_flac(bytes);
     }
 
+    if looks_like_webp(bytes) {
+        return parse_webp(bytes);
+    }
+
     if bytes.starts_with(b"DDS ") {
         return parse_dds(bytes);
     }
@@ -58,6 +66,18 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_sgi(bytes) {
         return parse_sgi(bytes);
+    }
+
+    if looks_like_sunrast(bytes) {
+        return parse_sunrast(bytes);
+    }
+
+    if looks_like_psd(bytes) {
+        return parse_psd(bytes);
+    }
+
+    if looks_like_jpeg(bytes) {
+        return parse_jpeg(bytes);
     }
 
     if bytes.starts_with(b"DKIF") {
