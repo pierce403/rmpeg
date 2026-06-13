@@ -4,6 +4,7 @@ use crate::{
     aac::{looks_like_adts_aac, parse_adts_aac},
     bmp::{looks_like_bmp, parse_bmp},
     dds::parse_dds,
+    exr::{looks_like_exr, parse_exr},
     flac::parse_flac,
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
     ivf::parse_ivf,
@@ -54,6 +55,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"DDS ") {
         return parse_dds(bytes);
+    }
+
+    if looks_like_exr(bytes) {
+        return parse_exr(bytes);
     }
 
     if looks_like_png(bytes) {

@@ -54,11 +54,11 @@ The public site currently reports the deployed snapshot. Local runs may differ
 from GitHub Actions because `ffprobe` versions differ. Treat the current oracle
 snapshot as data, not as a hardcoded expected total.
 
-Current local full-corpus snapshot from 2026-06-13 after PSD, JPEG, WebP, and Sun Raster metadata probing:
+Current local full-corpus snapshot from 2026-06-13 after OpenEXR metadata probing:
 
 ```text
-618 / 2178 strict media matches = 28.4%
-950 / 2511 total corpus passes, including files both tools reject
+676 / 2178 strict media matches = 31.0%
+1008 / 2511 total corpus passes, including files both tools reject
 0 corpus errors
 1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
 ```
@@ -162,7 +162,7 @@ rejects or mismatches them:
 - image metadata probers with stable headers before decode work
 - AAC and MP4 metadata correctness, especially `esds` edge cases
 - Matroska/WebM probing for VP8/VP9/Opus/Vorbis
-- JPEG2000, EXR, TGA, and remaining JPEG demuxer edge cases once false accepts are controlled
+- JPEG2000, TGA, and remaining JPEG demuxer edge cases once false accepts are controlled
 - compressed audio metadata where headers are small and well-scoped
 
 Avoid work that only makes rmpeg accept more files while producing wrong stream

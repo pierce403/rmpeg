@@ -28,8 +28,8 @@ numbers can differ slightly because ffprobe builds differ.
 Current local full-corpus snapshot from 2026-06-13:
 
 ```text
-618 / 2178 strict media matches = 28.4%
-950 / 2511 total corpus passes, including files both ffprobe and rmpeg reject
+676 / 2178 strict media matches = 31.0%
+1008 / 2511 total corpus passes, including files both ffprobe and rmpeg reject
 0 corpus errors
 1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
 ```

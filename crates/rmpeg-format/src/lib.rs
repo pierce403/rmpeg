@@ -1,6 +1,7 @@
 pub mod aac;
 pub mod bmp;
 pub mod dds;
+pub mod exr;
 pub mod flac;
 pub mod h264;
 pub mod ivf;
@@ -20,6 +21,7 @@ pub mod webp;
 pub use aac::parse_adts_aac;
 pub use bmp::parse_bmp;
 pub use dds::parse_dds;
+pub use exr::parse_exr;
 pub use flac::parse_flac;
 pub use h264::parse_h264_annex_b;
 pub use ivf::parse_ivf;
