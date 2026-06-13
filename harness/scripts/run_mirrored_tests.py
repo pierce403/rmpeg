@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import shutil
 import subprocess
@@ -7,7 +8,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from compare_framemd5 import compare_framemd5, parse_framemd5_text
+from compare_framemd5 import compare_framemd5
 from compare_probe_json import compare_probe, normalize_ffprobe_document
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -94,10 +95,25 @@ def write_probe_reference(sample):
 
 
 def write_framemd5_reference(sample):
-    result = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", str(sample), "-f", "framemd5", "-"],
+    probe_result = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_format",
+            "-show_streams",
+            "-of",
+            "json",
+            str(sample),
+        ],
         cwd=ROOT,
         text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    result = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(sample), "-f", "s16le", "-"],
+        cwd=ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -108,11 +124,58 @@ def write_framemd5_reference(sample):
         "expected_error": result.returncode != 0,
     }
     if result.returncode == 0:
-        output["frames"] = parse_framemd5_text(result.stdout)
+        if probe_result.returncode != 0:
+            output["expected_error"] = True
+            output["returncode"] = probe_result.returncode
+            output["stderr"] = trim(probe_result.stderr)
+        else:
+            probe = normalize_ffprobe_document(json.loads(probe_result.stdout))
+            stream = probe["streams"][0]
+            output["frames"] = normalized_framemd5_frames(
+                result.stdout,
+                int(stream["sample_rate"]),
+                int(stream["channels"]),
+            )
     else:
         output["returncode"] = result.returncode
-        output["stderr"] = trim(result.stderr)
+        output["stderr"] = trim(result.stderr.decode("utf-8", errors="replace"))
     write_json(REFERENCE / f"{stem(sample)}.framemd5.json", output)
+
+
+def normalized_framemd5_frames(decoded_pcm, sample_rate, channels):
+    output_block_align = channels * 2
+    samples_per_frame = wav_framemd5_samples_per_frame(sample_rate)
+    total_samples = len(decoded_pcm) // output_block_align
+    frames = []
+    pts = 0
+    offset = 0
+    while pts < total_samples:
+        duration = min(samples_per_frame, total_samples - pts)
+        size = duration * output_block_align
+        payload = decoded_pcm[offset : offset + size]
+        frames.append(
+            {
+                "stream_index": 0,
+                "dts": pts,
+                "pts": pts,
+                "duration": duration,
+                "size": size,
+                "hash": hashlib.md5(payload).hexdigest(),
+            }
+        )
+        pts += duration
+        offset += size
+    return frames
+
+
+def wav_framemd5_samples_per_frame(sample_rate):
+    target = sample_rate // 10
+    if target <= 0:
+        return 1
+    samples = 1
+    while samples <= target // 2:
+        samples *= 2
+    return samples
 
 
 def run_tests(rmpeg_probe, rmpeg, output_path):
