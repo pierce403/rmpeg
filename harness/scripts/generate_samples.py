@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+import math
+import struct
+import wave
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SAMPLES = ROOT / "harness" / "samples"
+
+
+def clamp_i16(value):
+    return max(-32768, min(32767, int(value)))
+
+
+def write_pcm16(path, sample_rate, channels, frames, sample_fn):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = bytearray()
+    for i in range(frames):
+        for ch in range(channels):
+            payload.extend(struct.pack("<h", clamp_i16(sample_fn(i, ch))))
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(channels)
+        handle.setsampwidth(2)
+        handle.setframerate(sample_rate)
+        handle.writeframes(bytes(payload))
+
+
+def write_pcm_u8(path, sample_rate, channels, frames):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = bytearray()
+    for i in range(frames):
+        value = 128 + int(80 * math.sin(2 * math.pi * 220 * i / sample_rate))
+        for _ in range(channels):
+            payload.append(max(0, min(255, value)))
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(channels)
+        handle.setsampwidth(1)
+        handle.setframerate(sample_rate)
+        handle.writeframes(bytes(payload))
+
+
+def chunk(tag, payload):
+    out = bytearray()
+    out.extend(tag)
+    out.extend(struct.pack("<I", len(payload)))
+    out.extend(payload)
+    if len(payload) % 2:
+        out.append(0)
+    return bytes(out)
+
+
+def write_odd_chunks(path):
+    frames = 64
+    sample_rate = 8000
+    channels = 1
+    pcm = b"".join(struct.pack("<h", i * 23 - 512) for i in range(frames))
+    fmt = struct.pack("<HHIIHH", 1, channels, sample_rate, sample_rate * 2, 2, 16)
+    body = bytearray()
+    body.extend(b"WAVE")
+    body.extend(chunk(b"JUNK", b"odd!!"))
+    body.extend(chunk(b"fmt ", fmt))
+    body.extend(chunk(b"data", pcm))
+    path.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+
+
+def main():
+    SAMPLES.mkdir(parents=True, exist_ok=True)
+    write_pcm16(SAMPLES / "mono_silence_8k.wav", 8000, 1, 8000, lambda _i, _ch: 0)
+    write_pcm16(
+        SAMPLES / "stereo_44k_sine.wav",
+        44100,
+        2,
+        44100,
+        lambda i, ch: math.sin(2 * math.pi * (220 + ch * 220) * i / 44100) * 12000,
+    )
+    write_pcm16(
+        SAMPLES / "short_100ms.wav",
+        8000,
+        1,
+        800,
+        lambda i, _ch: ((i % 64) - 32) * 128,
+    )
+    write_pcm16(
+        SAMPLES / "tiny.wav",
+        8000,
+        1,
+        800,
+        lambda i, _ch: math.sin(2 * math.pi * 440 * i / 8000) * 9000,
+    )
+    write_odd_chunks(SAMPLES / "odd_chunks.wav")
+    write_pcm_u8(SAMPLES / "unsupported_pcm_u8.wav", 8000, 1, 800)
+    (SAMPLES / "truncated_riff.wav").write_bytes(b"RIFF\x08\x00\x00\x00WAVEfmt ")
+    print(f"generated samples in {SAMPLES}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,15 @@
+[workspace]
+members = [
+  "crates/rmpeg-core",
+  "crates/rmpeg-format",
+  "crates/rmpeg-codec",
+  "crates/rmpeg-probe",
+  "crates/rmpeg-cli",
+  "xtask",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/pierce403/rmpeg"

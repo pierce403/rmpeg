@@ -1,0 +1,11 @@
+/target/
+/harness/samples/*.wav
+/harness/reference/*
+!/harness/reference/.gitkeep
+!/harness/samples/.gitkeep
+/site/data/*.json
+!/site/data/.gitkeep
+/site/dist/
+/.pytest_cache/
+*.pyc
+__pycache__/

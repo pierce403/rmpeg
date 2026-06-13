@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>rmpeg</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.5;
+        background: #f7f7f2;
+        color: #171b1f;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 48px 20px 72px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 4rem;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin: 44px 0 14px;
+        font-size: 1.45rem;
+      }
+
+      p {
+        max-width: 760px;
+      }
+
+      .subtitle {
+        margin: 12px 0 6px;
+        font-size: 1.35rem;
+      }
+
+      .stamp {
+        color: #596065;
+        font-size: 0.92rem;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0 24px;
+        font-size: 0.95rem;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid #d7d8d2;
+        padding: 10px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: #3c4448;
+        font-weight: 700;
+      }
+
+      tr.failed td {
+        background: #ffe7e2;
+      }
+
+      tr.passed td {
+        background: #e8f5ea;
+      }
+
+      tr.not-started td {
+        background: #f0f0ec;
+      }
+
+      .badge {
+        display: inline-block;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+
+      .badge.passed,
+      .badge.measured {
+        background: #ccebd2;
+        color: #173d22;
+      }
+
+      .badge.failed,
+      .badge.error {
+        background: #ffc8bd;
+        color: #681d10;
+      }
+
+      .badge.skipped,
+      .badge.not-started {
+        background: #e5e5dd;
+        color: #3a3a35;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.94em;
+      }
+
+      pre {
+        overflow-x: auto;
+        border-left: 4px solid #2f6f65;
+        padding: 12px 14px;
+        background: #ecece4;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          background: #111417;
+          color: #edf1f2;
+        }
+
+        .stamp,
+        th {
+          color: #b4bdc2;
+        }
+
+        th,
+        td {
+          border-bottom-color: #30373d;
+        }
+
+        tr.failed td {
+          background: #421f1a;
+        }
+
+        tr.passed td {
+          background: #183323;
+        }
+
+        tr.not-started td,
+        pre {
+          background: #202529;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>rmpeg</h1>
+      <p class="subtitle">A Rust media stack tested against FFmpeg.</p>
+      <p class="stamp">Generated from local correctness and benchmark JSON at {{generated_at}}.</p>
+
+      <h2>Current Status</h2>
+      <p>rmpeg is not FFmpeg-compatible yet. The MVP is WAV/PCM only.</p>
+      {{current_status}}
+
+      <h2>Correctness</h2>
+      {{correctness}}
+
+      <h2>Benchmarks</h2>
+      {{benchmarks}}
+
+      <h2>Supported Formats</h2>
+      <p>Implemented: RIFF/WAVE with PCM signed 16-bit little-endian audio, mono or stereo.</p>
+      <p>Not implemented: MP3, MP4/MOV, H.264, filters, seeking, resampling, remuxing, and most codec/container behavior.</p>
+
+      <h2>Known Failures</h2>
+      {{known_failures}}
+
+      <h2>Autoresearch Log</h2>
+      {{autoresearch_log}}
+
+      <h2>How To Reproduce</h2>
+      <pre><code>cargo xtask samples
+cargo xtask reference
+cargo xtask fate-mini
+cargo xtask bench
+cargo xtask site</code></pre>
+    </main>
+  </body>
+</html>

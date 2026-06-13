@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install system tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg hyperfine python3
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Generate samples
+        run: cargo xtask samples
+
+      - name: Generate references
+        run: cargo xtask reference
+
+      - name: Mirrored tests
+        run: cargo xtask fate-mini
+
+      - name: Benchmarks
+        run: cargo xtask bench
+
+      - name: Site
+        run: cargo xtask site
+
+      - name: Upload site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: site/dist
