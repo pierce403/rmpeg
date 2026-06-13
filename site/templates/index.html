@@ -139,6 +139,20 @@
         font-size: 0.92rem;
       }
 
+      .phase-two-teaser {
+        border-top: 1px solid #cfd3cb;
+        margin-top: 42px;
+        padding-top: 22px;
+      }
+
+      .phase-two-teaser h2 {
+        margin-top: 0;
+      }
+
+      .phase-two-teaser p {
+        color: #3c4448;
+      }
+
       table {
         width: 100%;
         border-collapse: collapse;
@@ -217,7 +231,8 @@
 
         .stamp,
         th,
-        .phase-metrics {
+        .phase-metrics,
+        .phase-two-teaser p {
           color: #b4bdc2;
         }
 
@@ -255,6 +270,10 @@
         }
 
         .phase-panel {
+          border-color: #30373d;
+        }
+
+        .phase-two-teaser {
           border-color: #30373d;
         }
 
@@ -337,6 +356,12 @@ cargo xtask fate-mini
 cargo xtask ffmpeg-samples
 cargo xtask bench
 cargo xtask site</code></pre>
+
+      <section class="phase-two-teaser">
+        <p class="phase-kicker">Phase 2</p>
+        <h2>Optimization</h2>
+        <p>After the sample media set is working, Phase 2 will track which older FFmpeg codec paths rmpeg can beat on speed. The benchmark table already exists; this phase waits until compatibility is no longer the main blocker.</p>
+      </section>
     </main>
   </body>
 </html>

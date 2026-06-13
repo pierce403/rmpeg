@@ -20,6 +20,12 @@ Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, and H.26
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
+## Roadmap
+
+Phase 1 is compatibility: make rmpeg successfully inspect and eventually decode as much of the upstream FFmpeg sample media set as possible, with the site reporting real progress from `site/data/upstream-samples.json`.
+
+Phase 2 is optimization. Once Phase 1 is no longer the main blocker, the site should show which older FFmpeg codec paths rmpeg is faster than, using the benchmark JSON instead of hand-written claims.
+
 ## Commands
 
 Generate deterministic tiny WAV fixtures:
