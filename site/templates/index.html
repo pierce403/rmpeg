@@ -163,6 +163,10 @@
       <h2>Correctness</h2>
       {{correctness}}
 
+      <h2>FFmpeg Sample Corpus</h2>
+      <p>This optional check syncs upstream FFmpeg FATE samples with FFmpeg's own <code>make fate-rsync</code> target, then probes every regular file with ffprobe and rmpeg-probe.</p>
+      {{upstream_samples}}
+
       <h2>Benchmarks</h2>
       {{benchmarks}}
 
@@ -180,6 +184,7 @@
       <pre><code>cargo xtask samples
 cargo xtask reference
 cargo xtask fate-mini
+cargo xtask ffmpeg-samples
 cargo xtask bench
 cargo xtask site</code></pre>
     </main>

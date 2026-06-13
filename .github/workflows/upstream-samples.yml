@@ -1,0 +1,44 @@
+name: upstream-samples
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_limit:
+        description: Optional check limit after syncing the full FFmpeg FATE sample corpus
+        required: false
+        default: ""
+
+jobs:
+  upstream-samples:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg make python3 rsync
+
+      - name: Sync upstream FFmpeg FATE samples
+        env:
+          RMPEG_FATE_RSYNC_OPTIONS: "-rltLW --timeout=60"
+        run: cargo xtask ffmpeg-samples-sync
+
+      - name: Check upstream FFmpeg FATE samples
+        env:
+          RMPEG_FFMPEG_SAMPLE_LIMIT: ${{ inputs.sample_limit }}
+        run: cargo xtask ffmpeg-samples-check
+
+      - name: Render site with upstream sample report
+        run: cargo xtask site
+
+      - name: Upload upstream sample report
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-samples-report
+          path: |
+            site/data/upstream-samples.json
+            site/dist

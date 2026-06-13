@@ -10,17 +10,20 @@ DIST = ROOT / "site" / "dist"
 STATIC = ROOT / "site" / "static"
 CORRECTNESS = ROOT / "site" / "data" / "correctness.json"
 BENCH_SUMMARY = ROOT / "site" / "data" / "benchmark-summary.json"
+UPSTREAM_SAMPLES = ROOT / "site" / "data" / "upstream-samples.json"
 RUNS = ROOT / "agents" / "runs"
 
 
 def main():
     correctness = read_json(CORRECTNESS, empty_correctness())
     benchmark_summary = read_json(BENCH_SUMMARY, empty_benchmarks())
+    upstream_samples = read_json(UPSTREAM_SAMPLES, empty_upstream_samples())
     rendered = TEMPLATE.read_text()
     replacements = {
         "generated_at": escape(correctness.get("generated_at", "unknown")),
         "current_status": render_current_status(correctness),
         "correctness": render_correctness(correctness),
+        "upstream_samples": render_upstream_samples(upstream_samples),
         "benchmarks": render_benchmarks(benchmark_summary),
         "known_failures": render_known_failures(correctness),
         "autoresearch_log": render_autoresearch_log(),
@@ -51,6 +54,16 @@ def empty_correctness():
 
 def empty_benchmarks():
     return {"generated_at": "unknown", "benchmarks": []}
+
+
+def empty_upstream_samples():
+    return {
+        "generated_at": "unknown",
+        "ffmpeg_commit": "unknown",
+        "samples_dir": "unknown",
+        "summary": {},
+        "tests": [],
+    }
 
 
 def render_current_status(correctness):
@@ -133,6 +146,41 @@ def render_benchmarks(summary):
     if not rows:
         rows.append(("No benchmarks have been run.", "", "", "not measured", badge("skipped")))
     return table(["Benchmark", "FFmpeg mean", "rmpeg mean", "Relative", "Status"], rows)
+
+
+def render_upstream_samples(report):
+    summary = report.get("summary", {})
+    total = int(summary.get("total", 0) or 0)
+    if total == 0:
+        return (
+            "<p>Not run yet. Run <code>cargo xtask ffmpeg-samples</code> to sync the upstream "
+            "FFmpeg FATE corpus with <code>make fate-rsync</code> and probe every regular file.</p>"
+        )
+    rows = [
+        ("Generated", escape(report.get("generated_at", "unknown"))),
+        ("FFmpeg commit", escape(report.get("ffmpeg_commit", "unknown"))),
+        ("Samples directory", f"<code>{escape(report.get('samples_dir', 'unknown'))}</code>"),
+        ("Total files checked", str(total)),
+        ("ffprobe accepted", str(summary.get("ffprobe_accepted", 0))),
+        ("rmpeg-probe accepted", str(summary.get("rmpeg_accepted", 0))),
+        ("Passed", str(summary.get("passed", 0))),
+        ("Failed", str(summary.get("failed", 0))),
+        ("Errors", str(summary.get("errors", 0))),
+    ]
+    failures = [
+        test for test in report.get("tests", []) if test.get("status") in {"failed", "error"}
+    ][:25]
+    failure_rows = [
+        (
+            escape(test.get("name", "")),
+            badge(test.get("status", "unknown")),
+            escape(test.get("details", "")),
+        )
+        for test in failures
+    ]
+    if not failure_rows:
+        failure_rows.append(("No failures in the upstream corpus probe run.", badge("passed"), ""))
+    return table(["Metric", "Value"], rows) + table(["Sample", "Status", "Details"], failure_rows)
 
 
 def render_known_failures(correctness):

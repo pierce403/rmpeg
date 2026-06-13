@@ -40,6 +40,25 @@ Run mirrored correctness tests and write `site/data/correctness.json`:
 cargo xtask fate-mini
 ```
 
+Sync the upstream FFmpeg FATE sample corpus with FFmpeg's own `make fate-rsync` target:
+
+```bash
+cargo xtask ffmpeg-samples-sync
+```
+
+Probe every regular file in the synced FFmpeg sample corpus with `ffprobe` and `rmpeg-probe`,
+then write `site/data/upstream-samples.json`:
+
+```bash
+cargo xtask ffmpeg-samples-check
+```
+
+Run both upstream sample steps:
+
+```bash
+cargo xtask ffmpeg-samples
+```
+
 Run hyperfine benchmarks and write benchmark JSON:
 
 ```bash
@@ -111,10 +130,26 @@ Linux with:
 - Python 3
 - FFmpeg and ffprobe
 - hyperfine
+- git, make, and rsync for `cargo xtask ffmpeg-samples`
 
 On Ubuntu, FFmpeg and hyperfine are available through apt on recent releases:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y ffmpeg hyperfine python3
+sudo apt-get install -y ffmpeg git hyperfine make python3 rsync
 ```
+
+The upstream FFmpeg sample command stores local artifacts under `.cache/ffmpeg/` by default.
+Override locations with:
+
+```bash
+RMPEG_FFMPEG_SOURCE_DIR=/path/to/ffmpeg-src \
+RMPEG_FFMPEG_BUILD_DIR=/path/to/ffmpeg-build \
+RMPEG_FFMPEG_SAMPLES_DIR=/path/to/fate-suite \
+cargo xtask ffmpeg-samples
+```
+
+Use `RMPEG_FFMPEG_REPO` and `RMPEG_FFMPEG_REF` to point at a different FFmpeg remote or ref.
+Use `RMPEG_FFMPEG_SAMPLE_LIMIT=100 cargo xtask ffmpeg-samples-check` for a quick local smoke run.
+The `upstream-samples` GitHub Actions workflow can also be triggered manually to run this corpus
+check and upload `site/data/upstream-samples.json` plus a rendered site artifact.

@@ -33,6 +33,15 @@ fn run() -> io::Result<()> {
             python(&["harness/scripts/run_benchmarks.py"])
         }
         "site" => python(&["harness/scripts/render_site.py"]),
+        "ffmpeg-samples-sync" => python(&["harness/scripts/run_ffmpeg_samples.py", "sync"]),
+        "ffmpeg-samples-check" => {
+            build_release()?;
+            python(&["harness/scripts/run_ffmpeg_samples.py", "check"])
+        }
+        "ffmpeg-samples" => {
+            build_release()?;
+            python(&["harness/scripts/run_ffmpeg_samples.py", "all"])
+        }
         "help" | "--help" | "-h" => {
             print_help();
             Ok(())
@@ -50,6 +59,9 @@ fn print_help() {
     println!("  fate-mini  run mirrored correctness tests");
     println!("  bench      run hyperfine benchmarks");
     println!("  site       render site/dist/index.html");
+    println!("  ffmpeg-samples-sync   sync upstream FFmpeg FATE samples with make fate-rsync");
+    println!("  ffmpeg-samples-check  probe the synced FFmpeg FATE sample corpus");
+    println!("  ffmpeg-samples        sync and probe the FFmpeg FATE sample corpus");
 }
 
 fn build_release() -> io::Result<()> {
