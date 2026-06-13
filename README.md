@@ -15,8 +15,9 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - FLAC STREAMINFO metadata probing
 - Ogg/Opus and Ogg/Vorbis header metadata probing
 - MP4/MOV track metadata probing for H.264 video and AAC audio
+- IVF metadata probing for VP8, VP9, and AV1 video
 
-Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, and H.264 support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, H.264, VP8, VP9, and AV1 support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 

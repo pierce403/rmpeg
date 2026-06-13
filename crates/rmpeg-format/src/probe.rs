@@ -3,6 +3,7 @@ use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 use crate::{
     aac::{looks_like_adts_aac, parse_adts_aac},
     flac::parse_flac,
+    ivf::parse_ivf,
     mp3::parse_mp3,
     mp4::parse_mp4,
     ogg::parse_ogg,
@@ -35,6 +36,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"fLaC") {
         return parse_flac(bytes);
+    }
+
+    if bytes.starts_with(b"DKIF") {
+        return parse_ivf(bytes);
     }
 
     if bytes.starts_with(b"OggS") {
