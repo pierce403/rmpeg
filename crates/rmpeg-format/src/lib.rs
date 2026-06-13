@@ -16,6 +16,8 @@ pub mod probe;
 pub mod psd;
 pub mod sgi;
 pub mod sunrast;
+pub mod tga;
+pub mod tiff;
 pub mod wav;
 pub mod webp;
 
@@ -37,5 +39,7 @@ pub use probe::probe;
 pub use psd::parse_psd;
 pub use sgi::parse_sgi;
 pub use sunrast::parse_sunrast;
+pub use tga::parse_tga;
+pub use tiff::parse_tiff;
 pub use wav::{parse_wav, WavFile};
 pub use webp::parse_webp;

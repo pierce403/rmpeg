@@ -26,6 +26,9 @@ Agent selection:
 If AGENT_CMD is unset, autoslop tries known local harnesses in this order:
   codex, claude, aider
 
+Required local tools:
+  git, python3, cargo, ffprobe, ffmpeg, hyperfine
+
 Guardrail environment:
   AUTOSLOP_MIN_STRICT_GAIN=1        minimum additional strict media matches
   AUTOSLOP_MIN_PERCENT_GAIN=1.0     minimum absolute Phase 1 percent gain
@@ -254,6 +257,7 @@ require_tool python3
 require_tool cargo
 require_tool ffprobe
 require_tool ffmpeg
+require_tool hyperfine
 [[ -f "$PROMPT" ]] || die "missing prompt file: $PROMPT"
 require_clean_tree
 

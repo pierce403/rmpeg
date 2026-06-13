@@ -27,8 +27,10 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - Sun Raster image metadata probing
 - OpenEXR image metadata probing
 - JPEG 2000 codestream metadata probing
+- TGA image metadata probing for files with a TGA 2.0 footer
+- TIFF image metadata probing
 
-Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, H.264, VP8, VP9, AV1, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, H.264, VP8, VP9, AV1, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 

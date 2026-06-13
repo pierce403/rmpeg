@@ -18,6 +18,8 @@ use crate::{
     psd::{looks_like_psd, parse_psd},
     sgi::{looks_like_sgi, parse_sgi},
     sunrast::{looks_like_sunrast, parse_sunrast},
+    tga::{looks_like_tga, parse_tga},
+    tiff::{looks_like_tiff, parse_tiff},
     wav::parse_wav,
     webp::{looks_like_webp, parse_webp},
 };
@@ -88,6 +90,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_jpeg2000_codestream(bytes) {
         return parse_jpeg2000_codestream(bytes);
+    }
+
+    if looks_like_tiff(bytes) {
+        return parse_tiff(bytes);
+    }
+
+    if looks_like_tga(bytes) {
+        return parse_tga(bytes);
     }
 
     if bytes.starts_with(b"DKIF") {
