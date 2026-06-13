@@ -7,6 +7,7 @@ use crate::{
     mp3::parse_mp3,
     mp4::parse_mp4,
     ogg::parse_ogg,
+    pnm::{looks_like_binary_pnm, parse_pnm},
     wav::parse_wav,
 };
 
@@ -40,6 +41,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"DKIF") {
         return parse_ivf(bytes);
+    }
+
+    if looks_like_binary_pnm(bytes) {
+        return parse_pnm(bytes);
     }
 
     if bytes.starts_with(b"OggS") {

@@ -4,6 +4,7 @@ pub mod ivf;
 pub mod mp3;
 pub mod mp4;
 pub mod ogg;
+pub mod pnm;
 pub mod probe;
 pub mod wav;
 
@@ -13,5 +14,6 @@ pub use ivf::parse_ivf;
 pub use mp3::parse_mp3;
 pub use mp4::parse_mp4;
 pub use ogg::parse_ogg;
+pub use pnm::parse_pnm;
 pub use probe::probe;
 pub use wav::{parse_wav, WavFile};
