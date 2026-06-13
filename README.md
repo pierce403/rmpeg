@@ -7,6 +7,7 @@ It is not FFmpeg-compatible yet. The MVP only supports a narrow WAV/PCM vertical
 - RIFF/WAVE header parsing
 - `fmt ` and `data` chunk discovery
 - PCM signed 16-bit little-endian audio
+- PCM unsigned 8-bit audio normalized to signed 16-bit samples for hashing
 - mono and stereo
 - sample rate, channels, bits per sample, data size, and duration estimate
 - a framemd5-like decode/hash path for PCM data
@@ -86,6 +87,14 @@ The autoresearch driver:
 7. Writes a short run log in `agents/runs/`.
 
 Forbidden paths include generated FFmpeg references, comparison scripts, scoring logic, CI workflows, and generated site data.
+
+## Current Result
+
+The current WAV mirrored suite has 14 tests:
+
+- 7 probe tests
+- 7 decode/hash tests
+- all passing against local FFmpeg references
 
 ## Required Tools
 

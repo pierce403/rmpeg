@@ -1,6 +1,6 @@
 use std::{env, fs, process};
 
-use rmpeg_codec::pcm_s16le_frame_hashes;
+use rmpeg_codec::pcm_frame_hashes;
 use rmpeg_core::{Result, RmpegError};
 use rmpeg_format::parse_wav;
 
@@ -21,7 +21,7 @@ fn run() -> Result<()> {
 
     let input = fs::read(&args[1])?;
     let wav = parse_wav(&input)?;
-    let frames = pcm_s16le_frame_hashes(&input, &wav, 1024)?;
+    let frames = pcm_frame_hashes(&input, &wav)?;
 
     println!("#format: frame checksums");
     println!("#version: 2");

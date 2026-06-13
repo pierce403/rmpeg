@@ -61,7 +61,7 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavFile> {
     let (data_offset, data_size) =
         data.ok_or_else(|| RmpegError::InvalidData("missing data chunk".to_string()))?;
 
-    validate_pcm_s16le(fmt)?;
+    validate_pcm(fmt)?;
 
     let bytes_per_second = u32::from(fmt.block_align)
         .checked_mul(fmt.sample_rate)
@@ -76,7 +76,7 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavFile> {
         metadata: AudioStreamMetadata {
             index: 0,
             codec_type: "audio".to_string(),
-            codec_name: "pcm_s16le".to_string(),
+            codec_name: codec_name(fmt.bits_per_sample)?.to_string(),
             sample_rate: fmt.sample_rate,
             channels: fmt.channels,
             bits_per_sample: fmt.bits_per_sample,
@@ -108,7 +108,7 @@ fn parse_fmt(bytes: &[u8]) -> Result<WavFmt> {
     })
 }
 
-fn validate_pcm_s16le(fmt: WavFmt) -> Result<()> {
+fn validate_pcm(fmt: WavFmt) -> Result<()> {
     if fmt.audio_format != 1 {
         return Err(RmpegError::Unsupported(format!(
             "WAV audio format {} is not PCM",
@@ -121,9 +121,9 @@ fn validate_pcm_s16le(fmt: WavFmt) -> Result<()> {
             fmt.channels
         )));
     }
-    if fmt.bits_per_sample != 16 {
+    if fmt.bits_per_sample != 8 && fmt.bits_per_sample != 16 {
         return Err(RmpegError::Unsupported(format!(
-            "WAV bits per sample {} is not pcm_s16le",
+            "WAV bits per sample {} is not supported PCM",
             fmt.bits_per_sample
         )));
     }
@@ -148,6 +148,16 @@ fn validate_pcm_s16le(fmt: WavFmt) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+fn codec_name(bits_per_sample: u16) -> Result<&'static str> {
+    match bits_per_sample {
+        8 => Ok("pcm_u8"),
+        16 => Ok("pcm_s16le"),
+        other => Err(RmpegError::Unsupported(format!(
+            "WAV bits per sample {other} is not supported PCM"
+        ))),
+    }
 }
 
 #[cfg(test)]
