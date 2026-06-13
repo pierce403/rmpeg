@@ -59,6 +59,10 @@ def normalize_format_name(format_name):
         return "wav"
     if "mp3" in names:
         return "mp3"
+    if "flac" in names:
+        return "flac"
+    if "ogg" in names:
+        return "ogg"
     if names.intersection({"mov", "mp4", "m4a", "3gp", "3g2", "mj2"}):
         return "mp4"
     return str(format_name).split(",")[0] if format_name else "unknown"
@@ -148,7 +152,7 @@ def compare_value(expected, actual, label, differences):
 
 
 def duration_tolerance(stream):
-    if stream.get("codec_type") == "audio" and stream.get("codec_name") in {"aac", "mp3"}:
+    if stream.get("codec_type") == "audio" and stream.get("codec_name") in {"aac", "mp3", "opus"}:
         return COMPRESSED_AUDIO_DURATION_TOLERANCE_SECONDS
     return DEFAULT_DURATION_TOLERANCE_SECONDS
 

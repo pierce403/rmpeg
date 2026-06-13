@@ -12,9 +12,11 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - sample rate, channels, bits per sample, data size, and duration estimate
 - a framemd5-like decode/hash path for PCM data
 - MP3 frame-header metadata probing
+- FLAC STREAMINFO metadata probing
+- Ogg/Opus header metadata probing
 - MP4/MOV track metadata probing for H.264 video and AAC audio
 
-Compressed decode is not implemented yet. MP3, AAC, and H.264 support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, FLAC, Opus, AAC, and H.264 support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
@@ -94,11 +96,11 @@ Forbidden paths include generated FFmpeg references, comparison scripts, scoring
 
 ## Current Result
 
-The current mirrored suite has 18 tests:
+The current mirrored suite has 22 tests:
 
-- 9 probe tests
+- 11 probe tests
 - 7 decode/hash tests
-- 2 skipped compressed decode/hash tests
+- 4 skipped compressed decode/hash tests
 - no failing tests against local FFmpeg references
 
 ## Required Tools

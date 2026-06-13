@@ -1,6 +1,6 @@
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 
-use crate::{mp3::parse_mp3, mp4::parse_mp4, wav::parse_wav};
+use crate::{flac::parse_flac, mp3::parse_mp3, mp4::parse_mp4, ogg::parse_ogg, wav::parse_wav};
 
 pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
     if bytes.starts_with(b"RIFF") {
@@ -20,6 +20,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"ID3") || looks_like_mp3_frame(bytes) {
         return parse_mp3(bytes);
+    }
+
+    if bytes.starts_with(b"fLaC") {
+        return parse_flac(bytes);
+    }
+
+    if bytes.starts_with(b"OggS") {
+        return parse_ogg(bytes);
     }
 
     if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {

@@ -2,6 +2,8 @@
 /harness/samples/*.wav
 /harness/samples/*.mp3
 /harness/samples/*.mp4
+/harness/samples/*.flac
+/harness/samples/*.ogg
 /harness/reference/*
 !/harness/reference/.gitkeep
 !/harness/samples/.gitkeep

@@ -56,7 +56,7 @@ def require_tool(name):
 
 def sample_paths():
     paths = []
-    for pattern in ("*.wav", "*.mp3", "*.mp4"):
+    for pattern in ("*.wav", "*.mp3", "*.mp4", "*.flac", "*.ogg"):
         paths.extend(path for path in SAMPLES.glob(pattern) if path.is_file())
     return sorted(paths)
 
@@ -72,6 +72,10 @@ def sample_format(path):
         return "mp3"
     if path.suffix == ".mp4":
         return "mp4"
+    if path.suffix == ".flac":
+        return "flac"
+    if path.suffix == ".ogg":
+        return "ogg"
     return path.suffix.lstrip(".") or "unknown"
 
 

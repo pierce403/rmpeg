@@ -98,7 +98,7 @@ def main():
 
 
 def clean_generated_samples():
-    for pattern in ("*.wav", "*.mp3", "*.mp4"):
+    for pattern in ("*.wav", "*.mp3", "*.mp4", "*.flac", "*.ogg"):
         for path in SAMPLES.glob(pattern):
             path.unlink()
 
@@ -125,6 +125,42 @@ def write_compressed_samples():
             "-write_xing",
             "0",
             str(SAMPLES / "tone_mp3.mp3"),
+        ]
+    )
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=330:sample_rate=44100:duration=1",
+            "-ac",
+            "2",
+            "-c:a",
+            "flac",
+            str(SAMPLES / "tone_flac.flac"),
+        ]
+    )
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=550:sample_rate=48000:duration=1",
+            "-ac",
+            "1",
+            "-c:a",
+            "libopus",
+            "-b:a",
+            "48k",
+            str(SAMPLES / "tone_opus.ogg"),
         ]
     )
     run(
