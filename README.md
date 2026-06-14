@@ -18,6 +18,10 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - Ogg/Opus and Ogg/Vorbis header metadata probing, including truncated final-page duration handling
 - MP4/MOV track metadata probing for H.264/HEVC/MPEG-4 video, AAC/AMR/Vorbis/QuickTime PCM audio, and common QuickTime video sample entries
 - raw DNxHD/DNxHR frame metadata probing
+- narrow MXF metadata probing for DNXUC FATE fixtures
+- ASF/WMA Lossless metadata probing from ASF header objects
+- TTA, OptimFROG, TAK, MLP, and TrueHD metadata probing
+- TTY/ANSI text demuxer metadata for observed ffprobe-accepted text reports
 - IVF metadata probing for VP8, VP9, and AV1 video
 - raw Annex B H.264 SPS metadata probing
 - binary PNM image metadata probing for PBM, PGM, and PPM files
@@ -41,7 +45,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - narrow raw VVC Annex B bitstream metadata probing
 - WavPack metadata probing from raw blocks and Matroska tracks
 
-Compressed decode is not implemented yet. MP3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, WavPack, H.264, HEVC, VVC, DNxHD/DNxHR, Hap, ProRes, QuickTime Animation, DV, VP8, VP9, AV1, Matroska/WebM, subtitles, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, WavPack, WMA Lossless, TTA, OptimFROG, TAK, MLP, TrueHD, H.264, HEVC, VVC, DNxHD/DNxHR, DNXUC, Hap, ProRes, QuickTime Animation, DV, VP8, VP9, AV1, Matroska/WebM, subtitles, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 

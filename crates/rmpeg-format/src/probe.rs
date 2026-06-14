@@ -4,6 +4,7 @@ use crate::{
     aac::{looks_like_adts_aac, parse_adts_aac},
     amr::parse_amr_nb,
     ape::parse_ape,
+    asf::{looks_like_asf, parse_asf},
     avi::{looks_like_avi, parse_avi},
     bmp::{looks_like_bmp, parse_bmp},
     dds::parse_dds,
@@ -17,17 +18,23 @@ use crate::{
     jpeg::{looks_like_jpeg, parse_jpeg},
     jpeg2000::{looks_like_jpeg2000_codestream, parse_jpeg2000_codestream},
     matroska::{looks_like_matroska, parse_matroska},
+    mlp::{looks_like_mlp_or_truehd, parse_mlp_or_truehd},
     mp3::parse_mp3,
     mp4::{looks_like_mp4, parse_mp4},
+    mxf::{looks_like_mxf, parse_mxf},
     ogg::parse_ogg,
+    osq::parse_osq,
     png::{looks_like_png, parse_png},
     pnm::{looks_like_binary_pnm, parse_pnm},
     psd::{looks_like_psd, parse_psd},
     sgi::{looks_like_sgi, parse_sgi},
     subtitle::{looks_like_subtitle, parse_subtitle},
     sunrast::{looks_like_sunrast, parse_sunrast},
+    tak::parse_tak,
     tga::{looks_like_tga, parse_tga},
     tiff::{looks_like_tiff, parse_tiff},
+    tta::parse_tta,
+    tty::{looks_like_tty, parse_tty},
     vvc::{looks_like_vvc_annex_b, parse_vvc_annex_b},
     wav::parse_wav,
     wavpack::parse_wavpack,
@@ -54,6 +61,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_avi(bytes);
     }
 
+    if looks_like_mxf(bytes) {
+        return parse_mxf(bytes);
+    }
+
+    if looks_like_asf(bytes) {
+        return parse_asf(bytes);
+    }
+
     if looks_like_adts_aac(bytes) {
         return parse_adts_aac(bytes);
     }
@@ -68,6 +83,22 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"MAC ") {
         return parse_ape(bytes);
+    }
+
+    if bytes.starts_with(b"TTA1") {
+        return parse_tta(bytes);
+    }
+
+    if bytes.starts_with(b"OSQ ") {
+        return parse_osq(bytes);
+    }
+
+    if bytes.starts_with(b"tBaK") {
+        return parse_tak(bytes);
+    }
+
+    if looks_like_mlp_or_truehd(bytes) {
+        return parse_mlp_or_truehd(bytes);
     }
 
     if bytes.starts_with(b"#!AMR\n") {
@@ -172,6 +203,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_subtitle(bytes) {
         return parse_subtitle(bytes);
+    }
+
+    if looks_like_tty(bytes) {
+        return parse_tty(bytes);
     }
 
     if looks_like_mp4(bytes) {

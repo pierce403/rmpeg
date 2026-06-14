@@ -87,3 +87,15 @@
 - Encrypted or protected MP4/MOV sample entries can use `encv` while carrying the real codec tag in a nested `sinf/frma` box. The probe surface should prefer that observable original-format tag for metadata naming while leaving decryption and packet handling unimplemented.
 
 - The raw DNxHR FATE fixtures share an observed frame header pattern `03 01 80 a0` at bytes 4..8, with big-endian height and width at offsets 24 and 26. Keep that detector narrow; it is enough for the current DNxHR corpus files without claiming a full DNxHD parser.
+
+- The DNXUC MXF FATE files share a stable leading KLV partition/header prefix and all report one `dnxuc` video stream at 512x256 for 0.125 seconds. Other MXF files in the corpus have similar KLV starts but different labels and stream layouts, so the current MXF probe deliberately accepts only this DNXUC header prefix.
+
+- ASF/WMA Lossless metadata can be read from the ASF File Properties and Stream Properties objects. Complete WMA Lossless fixtures report the WAVEFORMATEX bit depth, but the truncated `luckynight-partial.wma` fixture reports bit depth 0; for partial ASF files, match ffprobe by estimating duration from available payload bytes and zeroing bit depth.
+
+- Plain text files can be accepted by ffprobe's `tty` demuxer as `ansi` video at 640x400. The observed duration is `ceil(file_size / 240) / 25`, not a subtitle duration. Keep this probe limited to known content signatures such as the DecoderCheck license and IRT MXF Analyzer reports.
+
+- Encrypted TTA starts with the normal `TTA1` marker but uses header format `2`; local ffprobe rejects it without a password. Require TTA header format `1` so rmpeg does not create a false accept.
+
+- TAK FATE metadata includes an embedded RIFF/WAVE header near the front. The RIFF data chunk can advertise the original full PCM size even when the TAK file itself is partial, so read only the embedded `fmt ` and `data` sizes for probe metadata instead of handing it to the strict WAV parser.
+
+- OptimFROG `.osq` stores bit depth and channels together in the little-endian 16-bit field at offset 10: low byte is bit depth, high byte is channel count. The total sample count is a little-endian integer at offset 24 for the observed fixture.

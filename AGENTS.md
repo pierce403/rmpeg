@@ -54,11 +54,11 @@ The public site currently reports the deployed snapshot. Local runs may differ
 from GitHub Actions because `ffprobe` versions differ. Treat the current oracle
 snapshot as data, not as a hardcoded expected total.
 
-Current local full-corpus snapshot from 2026-06-13 after QuickTime/MOV sample-entry and raw DNxHR metadata probing:
+Current local full-corpus snapshot from 2026-06-13 after narrow MXF/lossless/TTY metadata probing:
 
 ```text
-1482 / 2178 strict media matches = 68.0%
-1814 / 2511 total corpus passes, including files both tools reject
+1511 / 2178 strict media matches = 69.4%
+1843 / 2511 total corpus passes, including files both tools reject
 0 corpus errors
 1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
 ```
@@ -182,6 +182,7 @@ rejects or mismatches them:
 - image metadata probers with stable headers before decode work
 - AAC and MP4 metadata correctness, especially `esds` edge cases
 - QuickTime/MOV duration edge cases, including edit lists and compressed-audio timing
+- remaining MXF metadata beyond the current DNXUC-only signature
 - DTS header metadata clusters
 - remaining JPEG/JPEG 2000 container edge cases once false accepts are controlled
 - compressed audio metadata where headers are small and well-scoped
