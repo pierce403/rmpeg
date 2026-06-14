@@ -4,6 +4,7 @@ use crate::{
     aac::{looks_like_adts_aac, parse_adts_aac},
     amr::parse_amr_nb,
     ape::parse_ape,
+    avi::{looks_like_avi, parse_avi},
     bmp::{looks_like_bmp, parse_bmp},
     dds::parse_dds,
     exr::{looks_like_exr, parse_exr},
@@ -45,6 +46,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
                 wav.metadata.duration_seconds,
             )],
         });
+    }
+
+    if looks_like_avi(bytes) {
+        return parse_avi(bytes);
     }
 
     if looks_like_adts_aac(bytes) {
