@@ -25,11 +25,11 @@ jq '.summary.ffprobe_accepted' site/data/upstream-samples.json
 The public site reports the latest deployed GitHub Actions snapshot. Local
 numbers can differ slightly because ffprobe builds differ.
 
-Current local full-corpus snapshot from 2026-06-13 after narrow DTS metadata probing:
+Current local full-corpus snapshot from 2026-06-13 after QuickTime/MOV sample-entry and raw DNxHR metadata probing:
 
 ```text
-1426 / 2178 strict media matches = 65.5%
-1758 / 2511 total corpus passes, including files both ffprobe and rmpeg reject
+1482 / 2178 strict media matches = 68.0%
+1814 / 2511 total corpus passes, including files both ffprobe and rmpeg reject
 0 corpus errors
 1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
 ```
@@ -53,7 +53,7 @@ harness. Good starting points:
 - Improve AAC-in-MP4 metadata parsing from `esds` rather than sample-entry
   defaults.
 - Improve raw H.264 and MP4 probing without scanning arbitrary binary payloads.
-- Add narrow metadata probing for DTS or remaining common container clusters.
+- Add narrow metadata probing for remaining common container clusters, especially MOV edit-list timing and MXF.
 - Convert known quirks into focused Rust tests.
 - Improve generated site clarity when it reflects real JSON output.
 

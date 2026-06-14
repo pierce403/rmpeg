@@ -22,15 +22,31 @@ struct TrackBuilder {
 }
 
 pub fn parse_mp4(bytes: &[u8]) -> Result<ProbeDocument> {
-    if !has_ftyp(bytes)? {
-        return Err(RmpegError::InvalidData("missing MP4 ftyp box".to_string()));
+    if !looks_like_mp4(bytes) {
+        return Err(RmpegError::InvalidData(
+            "missing MP4/MOV top-level box".to_string(),
+        ));
     }
 
     let mut streams = Vec::new();
     let mut pos = 0;
-    while let Some(header) = next_box(bytes, pos, bytes.len())? {
+    while pos + 8 <= bytes.len() {
+        let header = match next_box(bytes, pos, bytes.len()) {
+            Ok(Some(header)) => header,
+            Ok(None) => break,
+            Err(err) => {
+                if streams.is_empty() {
+                    return Err(err);
+                }
+                break;
+            }
+        };
         if &header.name == b"moov" {
-            streams = parse_moov(bytes, header.data_start, header.end)?;
+            let parsed = parse_moov(bytes, header.data_start, header.end)?;
+            if !parsed.is_empty() {
+                streams = parsed;
+                break;
+            }
         }
         pos = header.end;
     }
@@ -47,12 +63,12 @@ pub fn parse_mp4(bytes: &[u8]) -> Result<ProbeDocument> {
     })
 }
 
-fn has_ftyp(bytes: &[u8]) -> Result<bool> {
-    if let Some(header) = next_box(bytes, 0, bytes.len())? {
-        Ok(&header.name == b"ftyp")
-    } else {
-        Ok(false)
-    }
+pub fn looks_like_mp4(bytes: &[u8]) -> bool {
+    bytes.len() >= 8
+        && matches!(
+            &bytes[4..8],
+            b"ftyp" | b"moov" | b"wide" | b"mdat" | b"free" | b"skip"
+        )
 }
 
 fn parse_moov(bytes: &[u8], start: usize, end: usize) -> Result<Vec<StreamMetadata>> {
@@ -184,7 +200,9 @@ fn parse_stsd(data: &[u8], track: &mut TrackBuilder) -> Result<()> {
         });
     }
     let coding = [data[12], data[13], data[14], data[15]];
-    track.codec_name = Some(codec_name(coding).to_string());
+    let actual_coding =
+        protected_original_format(data, 8, entry_size, track.handler).unwrap_or(coding);
+    track.codec_name = Some(codec_name(actual_coding).to_string());
 
     match track.handler.as_ref() {
         Some(b"soun") => parse_audio_sample_entry(data, 8, entry_size, track)?,
@@ -208,7 +226,7 @@ fn parse_audio_sample_entry(
     }
     track.channels = Some(read_u16(data, entry + 24)?);
     track.sample_rate = Some(read_u32(data, entry + 32)? >> 16);
-    track.bits_per_sample = Some(0);
+    track.bits_per_sample = Some(bits_per_sample(track.codec_name.as_deref()));
     match track.codec_name.as_deref() {
         Some("amr_nb") => {
             track.channels = Some(1);
@@ -256,6 +274,68 @@ fn parse_audio_entry_config(
         };
         if &header.name == b"esds" {
             return parse_esds_audio_config(&data[header.data_start..header.end]);
+        }
+        pos = header.end;
+    }
+    None
+}
+
+fn protected_original_format(
+    data: &[u8],
+    entry: usize,
+    entry_size: usize,
+    handler: Option<[u8; 4]>,
+) -> Option<[u8; 4]> {
+    let child_start = sample_entry_child_start(data, entry, entry_size, handler?)?;
+    let entry_end = entry.checked_add(entry_size)?;
+    find_frma(data, child_start, entry_end)
+}
+
+fn sample_entry_child_start(
+    data: &[u8],
+    entry: usize,
+    entry_size: usize,
+    handler: [u8; 4],
+) -> Option<usize> {
+    let entry_end = entry.checked_add(entry_size)?;
+    let child_start = if &handler == b"vide" {
+        entry.checked_add(86)?
+    } else if &handler == b"soun" {
+        let version = read_u16(data, entry.checked_add(16)?).ok()?;
+        match version {
+            0 => entry.checked_add(36)?,
+            1 => entry.checked_add(52)?,
+            2 => entry.checked_add(72)?,
+            _ => entry.checked_add(36)?,
+        }
+    } else {
+        entry.checked_add(16)?
+    };
+    (child_start <= entry_end).then_some(child_start)
+}
+
+fn find_frma(data: &[u8], start: usize, end: usize) -> Option<[u8; 4]> {
+    let mut pos = start;
+    while pos < end {
+        let header = match next_box(data, pos, end) {
+            Ok(Some(header)) => header,
+            Ok(None) | Err(_) => return None,
+        };
+        if &header.name == b"frma" {
+            if header.data_start + 4 <= header.end {
+                return Some([
+                    data[header.data_start],
+                    data[header.data_start + 1],
+                    data[header.data_start + 2],
+                    data[header.data_start + 3],
+                ]);
+            }
+            return None;
+        }
+        if &header.name == b"sinf" {
+            if let Some(coding) = find_frma(data, header.data_start, header.end) {
+                return Some(coding);
+            }
         }
         pos = header.end;
     }
@@ -448,13 +528,42 @@ impl TrackBuilder {
 
 fn codec_name(coding: [u8; 4]) -> &'static str {
     match &coding {
+        b"AVdh" | b"AVdn" => "dnxhd",
+        b"Hap1" | b"Hap5" | b"HapA" | b"HapM" | b"HapY" => "hap",
+        b"MAC3" => "mace3",
+        b"MAC6" => "mace6",
+        b"QDM2" => "qdm2",
         b"avc1" | b"avc3" => "h264",
+        b"ap4h" | b"ap4x" | b"apch" | b"apcn" | b"apco" | b"apcs" => "prores",
+        b"dvc " | b"dvcp" | b"dvh5" | b"dvh6" | b"dvhp" | b"dvhq" | b"dvh1" => "dvvideo",
         b"mp4a" => "aac",
+        b"mp4v" => "mpeg4",
         b"hvc1" | b"hev1" => "hevc",
+        b"ima4" => "adpcm_ima_qt",
+        b"in24" => "pcm_s24le",
+        b"msVo" => "vorbis",
         b"mp3 " => "mp3",
+        b"raw " => "pcm_u8",
+        b"rle " => "qtrle",
         b"samr" => "amr_nb",
         b"sawb" => "amr_wb",
+        b"sowt" => "pcm_s16le",
+        b"twos" => "pcm_s16be",
+        b"alaw" => "pcm_alaw",
+        b"ulaw" => "pcm_mulaw",
+        [b'm', b's', 0, 2] => "adpcm_ms",
+        [b'm', b's', 0, 17] => "adpcm_ima_wav",
         _ => "unknown",
+    }
+}
+
+fn bits_per_sample(codec_name: Option<&str>) -> u16 {
+    match codec_name {
+        Some("adpcm_ima_qt" | "adpcm_ima_wav" | "adpcm_ms") => 4,
+        Some("pcm_alaw" | "pcm_mulaw" | "pcm_u8") => 8,
+        Some("pcm_s16be" | "pcm_s16le") => 16,
+        Some("pcm_s24le") => 24,
+        _ => 0,
     }
 }
 

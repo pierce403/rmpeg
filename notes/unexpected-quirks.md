@@ -77,3 +77,13 @@
 - Raw DTS core headers expose only the core layout; `dts_es.dts` needs the extension-audio flag to report 6.1, while the DTS-HD MA raw fixture carries an extension-substream sync marker later in the file and ffprobe reports 7.1/24-bit with no duration. Keep those as observed metadata heuristics until a fuller DTS parser exists.
 
 - The DTS MPEG-TS fixture can be probed without a general TS demuxer by scanning payload-unit-start PES packets for DTS core sync and using the first/last PES PTS span for duration.
+
+- Many QuickTime `.mov` FATE samples do not start with `ftyp`; valid top-level starts include `wide`/`mdat` before `moov`, and some clips put `moov` first. MP4/MOV probing should scan top-level boxes for `moov` instead of requiring `ftyp`, but it should still require a valid parsed audio/video stream before accepting input.
+
+- Truncated QuickTime samples such as `displaymatrix.mov` and `white_zombie_scrunch-part.mov` can have a complete `moov` followed by an `mdat` box whose declared size extends past the available file. FFprobe still reports metadata from `moov`; rmpeg should keep the parsed streams and stop on the trailing invalid media box instead of rejecting the file.
+
+- QuickTime sample-entry fourccs cover a lot of metadata-only wins: `rle ` is `qtrle`, `Hap1`/`Hap5`/`HapA`/`HapM`/`HapY` are `hap`, `apch`/`apcn`/`apcs`/`apco`/`ap4h` are `prores`, `AVdn`/`AVdh` are `dnxhd`, and `sowt`/`twos`/`raw `/`in24` map to PCM variants with explicit bit depths. These are container tags, not decode support.
+
+- Encrypted or protected MP4/MOV sample entries can use `encv` while carrying the real codec tag in a nested `sinf/frma` box. The probe surface should prefer that observable original-format tag for metadata naming while leaving decryption and packet handling unimplemented.
+
+- The raw DNxHR FATE fixtures share an observed frame header pattern `03 01 80 a0` at bytes 4..8, with big-endian height and width at offsets 24 and 26. Keep that detector narrow; it is enough for the current DNxHR corpus files without claiming a full DNxHD parser.

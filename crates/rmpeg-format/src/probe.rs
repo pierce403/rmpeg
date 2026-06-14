@@ -7,6 +7,7 @@ use crate::{
     avi::{looks_like_avi, parse_avi},
     bmp::{looks_like_bmp, parse_bmp},
     dds::parse_dds,
+    dnxhd::{looks_like_raw_dnxhd, parse_raw_dnxhd},
     dts::{looks_like_mpegts, looks_like_raw_dts, parse_dtshd, parse_mpegts_dts, parse_raw_dts},
     exr::{looks_like_exr, parse_exr},
     flac::parse_flac,
@@ -17,7 +18,7 @@ use crate::{
     jpeg2000::{looks_like_jpeg2000_codestream, parse_jpeg2000_codestream},
     matroska::{looks_like_matroska, parse_matroska},
     mp3::parse_mp3,
-    mp4::parse_mp4,
+    mp4::{looks_like_mp4, parse_mp4},
     ogg::parse_ogg,
     png::{looks_like_png, parse_png},
     pnm::{looks_like_binary_pnm, parse_pnm},
@@ -83,6 +84,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_raw_dts(bytes) {
         return parse_raw_dts(bytes);
+    }
+
+    if looks_like_raw_dnxhd(bytes) {
+        return parse_raw_dnxhd(bytes);
     }
 
     if looks_like_mpegts(bytes) {
@@ -169,7 +174,7 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_subtitle(bytes);
     }
 
-    if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
+    if looks_like_mp4(bytes) {
         return parse_mp4(bytes);
     }
 
