@@ -207,3 +207,19 @@
 - AVI partial `movi` LIST sizes can extend beyond EOF. Counting observed stream chunks needs a tolerant chunk walk, but raw chunk count still is not a complete duration oracle for all Fraps and screen-codec partial captures because ffprobe also accounts for codec- or packet-level validity.
 
 - Electronic Arts VP6 chunks use total chunk size, not payload size. The observed `MVhd`/`AVhd` headers store padded dimensions that round up to multiples of 16 and derive duration from a fixed-point fps field at data offset 16. `SCHl` audio headers in the same family can signal `adpcm_ea_r3` at 32 kHz stereo even when decode remains unimplemented.
+
+- QCP fixtures are RIFF `QLCM` files. For the observed QCELP/EVRC files, local ffprobe reports 8 kHz mono and estimates duration from bytes after the `fmt ` chunk divided by the codec bit rate (`13,000` for QCELP, `9,600` for EVRC), not just from the `data` chunk size.
+
+- NIST Sphere audio has plain ASCII header fields before the payload. The observed ulaw fixture reports `pcm_mulaw`, and `sample_count / sample_rate` matches ffprobe duration.
+
+- Sony Wave64 chunks use 16-byte GUIDs and 64-bit little-endian chunk sizes that include the 24-byte chunk header. The observed PCM fixture's data payload is `chunk_size - 24`, rounded by normal W64 chunk alignment.
+
+- XBM dimensions are C preprocessor `#define` values ending in `_width` and `_height`; ffprobe reports standalone XBM as `xbm_pipe` with codec `xbm` and missing duration, normalized to 0.0 by the probe comparator.
+
+- Westwood VQA stores frame count, width, height, and frame rate in `VQHD`. The observed fixtures use one video stream and one mono 22.05 kHz audio stream, with stream durations equal to `frame_count / frame_rate`.
+
+- Westwood AUD and raw ADP/DTK have weak or no leading magic in the observed corpus. Keep them extension-gated in `rmpeg-probe`; ADP/DTK duration matches `file_size * 7 / 8 / 48000`, and the observed AUD duration is `data_size * 2 / sample_rate`.
+
+- Several FATE WAV files use explicit non-PCM WAVEFORMATEX tags where header-only metadata is enough: `0x0031` is `gsm_ms` and uses the `fact` sample count; `0x0017` is OKI IMA ADPCM and duration is `data_size * 2 / sample_rate`; `0x0125` is Sanyo ADPCM and uses `fact`; `0x028e` is MSN Siren and duration is `data_size * 8 / sample_rate`; `0x0022` is TrueSpeech and uses `fact`; `0x0161` is WMA v2 and duration follows the available data bytes divided by byte rate. Local ffprobe also accepts PCM WAV with a wrong average-byte-rate field when block alignment and sample rate are otherwise usable.
+
+- GameCube RSD files have a real `RSD3`/`RSD4` header, unlike the separate RedSpark `.rsd` fixture. The observed `RADP` stream starts after a fixed 0x800-byte header and maps payload bytes to samples as `bytes * 4 / 5`; observed `GADP` uses the header data offset and maps payload bytes to samples as `bytes * 7 / 4`.

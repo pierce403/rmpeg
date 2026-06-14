@@ -1,5 +1,23 @@
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 
+pub fn parse_raw_adp_dtk(bytes: &[u8]) -> Result<ProbeDocument> {
+    if bytes.is_empty() {
+        return Err(RmpegError::InvalidData("empty ADP stream".to_string()));
+    }
+
+    Ok(ProbeDocument {
+        format: "adp".to_string(),
+        streams: vec![StreamMetadata::audio(
+            0,
+            "adpcm_dtk",
+            48_000,
+            2,
+            0,
+            bytes.len() as f64 * 7.0 / 8.0 / 48_000.0,
+        )],
+    })
+}
+
 pub fn parse_raw_g722(bytes: &[u8]) -> Result<ProbeDocument> {
     if bytes.is_empty() {
         return Err(RmpegError::InvalidData("empty G.722 stream".to_string()));
@@ -64,6 +82,17 @@ fn g723_1_frame_size(header: u8) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_extension_gated_adp_duration_from_byte_count() {
+        let doc = parse_raw_adp_dtk(&vec![0; 32_768]).expect("adp");
+
+        assert_eq!(doc.format, "adp");
+        assert_eq!(doc.streams[0].codec_name, "adpcm_dtk");
+        assert_eq!(doc.streams[0].sample_rate, Some(48_000));
+        assert_eq!(doc.streams[0].channels, Some(2));
+        assert_eq!(doc.streams[0].duration_seconds, Some(28_672.0 / 48_000.0));
+    }
 
     #[test]
     fn parses_raw_g722_duration_from_byte_count() {

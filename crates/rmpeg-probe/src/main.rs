@@ -3,8 +3,8 @@ use std::{env, fs, process};
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 use rmpeg_format::{
     parse_aea, parse_alias_pix, parse_cdxl, parse_jxl, parse_pp_bnk,
-    parse_raw_ac3_or_eac3_scanning, parse_raw_g722, parse_raw_g723_1, parse_txd, parse_vc1_rcv,
-    parse_vmd, probe,
+    parse_raw_ac3_or_eac3_scanning, parse_raw_adp_dtk, parse_raw_g722, parse_raw_g723_1, parse_txd,
+    parse_vc1_rcv, parse_vmd, parse_westwood_aud, probe,
 };
 
 fn main() {
@@ -54,6 +54,8 @@ fn probe_raw_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
         "txd" => parse_txd(input),
         "rcv" => parse_vc1_rcv(input),
         "pix" => parse_alias_pix(input),
+        "adp" => parse_raw_adp_dtk(input),
+        "aud" => parse_westwood_aud(input),
         "5c" | "11c" | "44c" => parse_pp_bnk(input),
         "g722" => parse_raw_g722(input),
         "tco" => parse_raw_g723_1(input),

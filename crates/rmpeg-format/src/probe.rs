@@ -42,13 +42,16 @@ use crate::{
     mpegts::{looks_like_mpegts, parse_mpegts},
     mpegvideo::{looks_like_mpeg_video, parse_mpeg_video},
     mxf::{looks_like_mxf, parse_mxf},
+    nistsphere::{looks_like_nistsphere, parse_nistsphere},
     ogg::parse_ogg,
     osq::parse_osq,
     png::{looks_like_png, parse_png},
     pnm::{looks_like_binary_pnm, parse_pnm},
     psd::{looks_like_psd, parse_psd},
+    qcp::{looks_like_qcp, parse_qcp},
     qoa::{looks_like_qoa, parse_qoa},
     realmedia::{looks_like_realmedia, parse_realmedia},
+    rsd::{looks_like_rsd, parse_rsd},
     sgi::{looks_like_sgi, parse_sgi},
     smjpeg::{looks_like_smjpeg, parse_smjpeg},
     subtitle::{looks_like_subtitle, parse_subtitle},
@@ -60,10 +63,13 @@ use crate::{
     tty::{looks_like_tty, parse_tty},
     vc1::{looks_like_raw_vc1, parse_raw_vc1},
     voc::{looks_like_voc, parse_voc},
+    vqa::{looks_like_vqa, parse_vqa},
     vvc::{looks_like_vvc_annex_b, parse_vvc_annex_b},
+    w64::{looks_like_w64, parse_w64},
     wav::parse_wav,
     wavpack::parse_wavpack,
     webp::{looks_like_webp, parse_webp},
+    xbm::{looks_like_xbm, parse_xbm},
 };
 
 pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
@@ -82,8 +88,20 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         });
     }
 
+    if looks_like_qcp(bytes) {
+        return parse_qcp(bytes);
+    }
+
+    if looks_like_w64(bytes) {
+        return parse_w64(bytes);
+    }
+
     if looks_like_avi(bytes) {
         return parse_avi(bytes);
+    }
+
+    if looks_like_vqa(bytes) {
+        return parse_vqa(bytes);
     }
 
     if looks_like_iff(bytes) {
@@ -194,6 +212,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_bethsoftvid(bytes);
     }
 
+    if looks_like_rsd(bytes) {
+        return parse_rsd(bytes);
+    }
+
     if looks_like_bfstm_or_brstm(bytes) {
         return parse_bfstm_or_brstm(bytes);
     }
@@ -252,6 +274,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_fits(bytes) {
         return parse_fits(bytes);
+    }
+
+    if looks_like_nistsphere(bytes) {
+        return parse_nistsphere(bytes);
     }
 
     if looks_like_sgi(bytes) {
@@ -316,6 +342,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_binary_pnm(bytes) {
         return parse_pnm(bytes);
+    }
+
+    if looks_like_xbm(bytes) {
+        return parse_xbm(bytes);
     }
 
     if bytes.starts_with(b"OggS") {
