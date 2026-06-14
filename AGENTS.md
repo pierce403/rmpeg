@@ -54,11 +54,11 @@ The public site currently reports the deployed snapshot. Local runs may differ
 from GitHub Actions because `ffprobe` versions differ. Treat the current oracle
 snapshot as data, not as a hardcoded expected total.
 
-Current local full-corpus snapshot from 2026-06-13 after raw HEVC metadata probing:
+Current local full-corpus snapshot from 2026-06-13 after narrow raw VVC metadata probing:
 
 ```text
-1204 / 2178 strict media matches = 55.3%
-1536 / 2511 total corpus passes, including files both tools reject
+1228 / 2178 strict media matches = 56.4%
+1560 / 2511 total corpus passes, including files both tools reject
 0 corpus errors
 1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
 ```
@@ -181,7 +181,6 @@ rejects or mismatches them:
 
 - image metadata probers with stable headers before decode work
 - AAC and MP4 metadata correctness, especially `esds` edge cases
-- raw VVC conformance bitstreams if SPS parsing can stay narrow
 - WavPack and DTS header metadata clusters
 - remaining JPEG/JPEG 2000 container edge cases once false accepts are controlled
 - compressed audio metadata where headers are small and well-scoped

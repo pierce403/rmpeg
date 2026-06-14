@@ -20,6 +20,7 @@ pub mod sgi;
 pub mod sunrast;
 pub mod tga;
 pub mod tiff;
+pub mod vvc;
 pub mod wav;
 pub mod webp;
 
@@ -45,5 +46,6 @@ pub use sgi::parse_sgi;
 pub use sunrast::parse_sunrast;
 pub use tga::parse_tga;
 pub use tiff::parse_tiff;
+pub use vvc::parse_vvc_annex_b;
 pub use wav::{parse_wav, WavFile};
 pub use webp::parse_webp;

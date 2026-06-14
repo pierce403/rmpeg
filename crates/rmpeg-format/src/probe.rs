@@ -22,6 +22,7 @@ use crate::{
     sunrast::{looks_like_sunrast, parse_sunrast},
     tga::{looks_like_tga, parse_tga},
     tiff::{looks_like_tiff, parse_tiff},
+    vvc::{looks_like_vvc_annex_b, parse_vvc_annex_b},
     wav::parse_wav,
     webp::{looks_like_webp, parse_webp},
 };
@@ -116,6 +117,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_hevc_annex_b(bytes) {
         return parse_hevc_annex_b(bytes);
+    }
+
+    if looks_like_vvc_annex_b(bytes) {
+        return parse_vvc_annex_b(bytes);
     }
 
     if looks_like_binary_pnm(bytes) {

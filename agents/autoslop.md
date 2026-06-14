@@ -48,7 +48,6 @@ Rules:
 
 Good current targets:
 
-- Raw VVC conformance bitstream metadata, if SPS parsing stays narrow.
 - WavPack or DTS header metadata clusters.
 - AAC and MP4 metadata correctness, especially `esds` edge cases.
 - Remaining image metadata clusters with stable headers.
