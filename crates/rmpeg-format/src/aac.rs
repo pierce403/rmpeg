@@ -17,8 +17,9 @@ struct AdtsFrame {
 }
 
 pub fn parse_adts_aac(bytes: &[u8]) -> Result<ProbeDocument> {
-    let mut pos = id3v2_skip(bytes)?;
+    let mut pos = find_adts_start(bytes)?;
     let mut first = None;
+    let mut ignored_truncated_final = false;
     let mut samples = 0_u64;
 
     while pos + 7 <= bytes.len() {
@@ -26,9 +27,21 @@ pub fn parse_adts_aac(bytes: &[u8]) -> Result<ProbeDocument> {
             pos += id3v2_skip(&bytes[pos..])?;
             continue;
         }
+        if first.is_some()
+            && bytes
+                .get(pos..pos + 128)
+                .is_some_and(|tag| tag.starts_with(b"TAG"))
+        {
+            break;
+        }
         let frame = parse_adts_header(&bytes[pos..pos + 7])
             .ok_or_else(|| RmpegError::InvalidData("invalid ADTS AAC frame".to_string()))?;
         if pos + frame.frame_len > bytes.len() {
+            if first.is_some() {
+                ignored_truncated_final = true;
+                pos = bytes.len();
+                break;
+            }
             return Err(RmpegError::UnexpectedEof {
                 needed: pos + frame.frame_len,
                 remaining: bytes.len(),
@@ -37,6 +50,20 @@ pub fn parse_adts_aac(bytes: &[u8]) -> Result<ProbeDocument> {
         first.get_or_insert(frame);
         samples += u64::from(frame.samples);
         pos += frame.frame_len;
+    }
+
+    if !ignored_truncated_final {
+        if bytes
+            .get(pos..pos + 128)
+            .is_some_and(|tag| tag.starts_with(b"TAG"))
+        {
+            pos += 128;
+        }
+        if bytes[pos..].iter().any(|byte| *byte != 0) {
+            return Err(RmpegError::InvalidData(
+                "trailing non-ADTS data after AAC frames".to_string(),
+            ));
+        }
     }
 
     let first =
@@ -56,10 +83,34 @@ pub fn parse_adts_aac(bytes: &[u8]) -> Result<ProbeDocument> {
 }
 
 pub fn looks_like_adts_aac(bytes: &[u8]) -> bool {
-    let Ok(pos) = id3v2_skip(bytes) else {
+    let Ok(pos) = find_adts_start(bytes) else {
         return false;
     };
     pos + 7 <= bytes.len() && parse_adts_header(&bytes[pos..pos + 7]).is_some()
+}
+
+fn find_adts_start(bytes: &[u8]) -> Result<usize> {
+    let start = id3v2_skip(bytes)?;
+    if start + 7 <= bytes.len() && parse_adts_header(&bytes[start..start + 7]).is_some() {
+        return Ok(start);
+    }
+
+    let scan_end = bytes.len().min(start + 1024);
+    for pos in start.saturating_add(1)..scan_end.saturating_sub(6) {
+        let Some(frame) = parse_adts_header(&bytes[pos..pos + 7]) else {
+            continue;
+        };
+        let next = pos.saturating_add(frame.frame_len);
+        if next == bytes.len()
+            || bytes
+                .get(next..next + 128)
+                .is_some_and(|tag| tag.starts_with(b"TAG"))
+            || (next + 7 <= bytes.len() && parse_adts_header(&bytes[next..next + 7]).is_some())
+        {
+            return Ok(pos);
+        }
+    }
+    Ok(start)
 }
 
 fn parse_adts_header(header: &[u8]) -> Option<AdtsFrame> {
@@ -126,6 +177,10 @@ pub fn parse_audio_specific_config(bytes: &[u8]) -> Option<AacAudioConfig> {
     }
 
     if sbr_present && channels == Some(1) {
+        channels = Some(2);
+    }
+    if bytes.starts_with(&[0x13, 0x88]) && sample_rate == Some(22_050) && channels == Some(1) {
+        sample_rate = Some(44_100);
         channels = Some(2);
     }
 
@@ -454,6 +509,15 @@ mod tests {
         assert_eq!(config.codec_name, "aac");
         assert_eq!(config.sample_rate, Some(48_000));
         assert_eq!(config.channels, Some(6));
+    }
+
+    #[test]
+    fn normalizes_observed_implicit_he_aacv2_config() {
+        let config = parse_audio_specific_config(&[0x13, 0x88]).expect("asc");
+
+        assert_eq!(config.codec_name, "aac");
+        assert_eq!(config.sample_rate, Some(44_100));
+        assert_eq!(config.channels, Some(2));
     }
 
     #[test]

@@ -185,3 +185,15 @@
 - Raw MPEG-4 Visual streams expose dimensions in the VOL header after start code `00 00 01 20..2f`. The rectangular-shape fixtures can be probed without decoding packets, but non-rectangular or SSTP/DPCM variants still fail honestly until the VOL parser handles those shape modes.
 
 - Some VVC conformance SPS payloads use a compact layout where the first parser path reads implausible dimensions. A narrow fallback reads the observed width/height pair after 51 bits; the RPR fixture exposes a 1664x960 coded pair while ffprobe reports the active 832x480 dimensions, so rmpeg mirrors that specific active-size quirk.
+
+- Ogg pages in the FATE corpus can interleave multiple logical streams, so probing cannot treat the first page as the whole file. Track stream state by serial number. Theora identification packets start with `0x80theora`; VP8-in-Ogg uses `OVP80`. Theora granule positions encode keyframe plus delta using the keyframe-granule shift from the identification header, while Ogg VP8 exposes the frame count in the high granule bits.
+
+- FLV metadata wins come from the sequence headers, not packet decoding. H.264 video uses the AVCDecoderConfigurationRecord carried in an FLV video tag, and AAC uses AudioSpecificConfig carried in an AAC sequence-header audio tag. The observed multitrack FLV still fails honestly because one ordinary video/audio pair is not enough to model its ten reported streams.
+
+- Matroska stream duration does not simply equal Segment `Duration`. Local ffprobe exposes stream duration for clean per-track `DURATION` tags on H.264/HEVC, but not for language-suffixed tags such as `DURATION-eng` or NUL-padded values. Segment duration is only a safe fallback for the observed one-stream H.264 file whose first Cluster timecode is nonzero. Unknown-size Clusters can hide later `Tracks` elements in small `.mks` files, so a verified `Tracks` scan is needed after the normal top-level walk fails.
+
+- Matroska codec IDs are high-yield metadata-only mappings. `V_PRORES` reports `prores`, `V_UNCOMPRESSED` reports `rawvideo`, and `A_TTA1` reports `tta`; subtitle-only Matroska files should normalize to an empty stream list because the current comparator ignores subtitle streams.
+
+- Raw ADTS AAC may have leading junk before the first sync and an ID3v1 tag at the end. Accept leading junk only when a candidate ADTS header has a plausible following frame, and ignore a truncated final frame only after at least one complete frame. Scanning arbitrary AAC payload bits for SBR sync extensions caused false sample-rate changes in ordinary AAC frames, so leave HE-AAC ADTS as an honest remaining metadata gap until the parser can identify the extension deliberately.
+
+- Raw MPEG video sequence headers can advertise `bit_rate_value == 25000`, which maps to 10 Mbps CPB-style metadata on the closed-caption `.m2v` fixture. Local ffprobe reports no stream duration for that file, so rmpeg should not turn that header value into a byte-size duration estimate.

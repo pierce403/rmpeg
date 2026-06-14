@@ -16,7 +16,8 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - raw AMR-NB metadata probing
 - FLAC STREAMINFO metadata probing
 - Monkey's Audio / APE metadata probing
-- Ogg/Opus and Ogg/Vorbis header metadata probing, including truncated final-page duration handling
+- Ogg/Opus, Ogg/Vorbis, Ogg/Theora, and Ogg/VP8 header metadata probing, including truncated final-page duration handling
+- FLV H.264/AAC sequence-header metadata probing
 - MP4/MOV track metadata probing for H.264/HEVC/MPEG-4 video, AAC/AMR/Vorbis/QuickTime PCM audio, and common QuickTime video sample entries
 - CAF audio metadata probing for observed AAC, Opus, and PCM fixtures
 - raw DNxHD/DNxHR frame metadata probing
@@ -45,6 +46,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - IVF metadata probing for VP8, VP9, and AV1 video
 - raw Annex B H.264 SPS metadata probing
 - raw MPEG-4 Visual VOL metadata probing
+- raw MPEG video sequence-header metadata probing
 - binary PNM image metadata probing for PBM, PGM, and PPM files
 - DDS image metadata probing
 - PNG, APNG, and BMP image metadata probing
@@ -57,7 +59,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - JPEG 2000 codestream metadata probing
 - TGA image metadata probing for files with a TGA 2.0 footer
 - TIFF image metadata probing
-- conservative Matroska/WebM track metadata probing, including Opus/Vorbis compressed audio metadata
+- conservative Matroska/WebM track metadata probing, including Opus/Vorbis, ProRes, rawvideo, TTA, and subtitle-only metadata normalization
 - MP4 AAC/ALS `esds` metadata probing for AudioSpecificConfig sample rate, channels, and ALS bit depth
 - narrow RIFF/AVI video metadata probing for UtVideo fixtures
 - broader RIFF/AVI codec-tag metadata probing for observed FATE video fourccs
@@ -68,7 +70,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - WavPack metadata probing from raw blocks and Matroska tracks
 - BRender PIX and Alias PIX image metadata probing
 
-Compressed decode is not implemented yet. MP3, AC-3, E-AC-3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, CAF, QOA, WavPack, WMA Lossless, WMAPro, WMA Voice, ATRAC1, ATRAC3, ALP/APM ADPCM, RealAudio/RealVideo, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, G.722, G.723.1, PP_BNK, CDXL, VOC, SMJPEG, Bethesda VID, VMD, BFSTM/BRSTM, H.264, HEVC, VVC, VC-1, raw MPEG-4 Visual, DNxHD/DNxHR, DNXUC, G2M, Hap, ProRes, QuickTime Animation, DV, VP8, VP9, AV1, Matroska/WebM, subtitles, DDS, GIF, DPX, FLIC, TXD, FITS, IFF, JPEG XL, PNG/APNG, BMP, BRender PIX, Alias PIX, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, AC-3, E-AC-3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, CAF, QOA, WavPack, WMA Lossless, WMAPro, WMA Voice, ATRAC1, ATRAC3, ALP/APM ADPCM, RealAudio/RealVideo, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, G.722, G.723.1, PP_BNK, CDXL, VOC, SMJPEG, Bethesda VID, VMD, BFSTM/BRSTM, H.264, HEVC, VVC, VC-1, raw MPEG-4 Visual, raw MPEG video, DNxHD/DNxHR, DNXUC, G2M, Hap, ProRes, QuickTime Animation, DV, VP8, VP9, AV1, FLV, Matroska/WebM, subtitles, DDS, GIF, DPX, FLIC, TXD, FITS, IFF, JPEG XL, PNG/APNG, BMP, BRender PIX, Alias PIX, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
@@ -76,7 +78,7 @@ FFmpeg is used as the behavior oracle. This project does not copy or mechanicall
 
 Phase 1 is compatibility: make rmpeg successfully inspect and eventually decode as much of the upstream FFmpeg sample media set as possible, with the site reporting real progress from `site/data/upstream-samples.json`.
 
-Current Phase 1 strict corpus progress is 1761 of 2178 FFmpeg-accepted samples, or 80.854%, on the local upstream sample report.
+Current Phase 1 strict corpus progress is 1783 of 2178 FFmpeg-accepted samples, or 81.864%, on the local upstream sample report.
 
 Phase 2 is optimization. Once Phase 1 is no longer the main blocker, the site should show which older FFmpeg codec paths rmpeg is faster than, using the benchmark JSON instead of hand-written claims.
 

@@ -1,12 +1,18 @@
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
+use std::collections::HashMap;
 
 const ID_EBML: u64 = 0x1A45DFA3;
 const ID_DOCTYPE: u64 = 0x4282;
 const ID_SEGMENT: u64 = 0x18538067;
+const ID_INFO: u64 = 0x1549A966;
+const ID_TIMECODE_SCALE: u64 = 0x2AD7B1;
+const ID_DURATION: u64 = 0x4489;
 const ID_TRACKS: u64 = 0x1654AE6B;
 const ID_TRACK_ENTRY: u64 = 0xAE;
 const ID_CLUSTER: u64 = 0x1F43B675;
+const ID_CLUSTER_TIMECODE: u64 = 0xE7;
 const ID_TRACK_TYPE: u64 = 0x83;
+const ID_TRACK_UID: u64 = 0x73C5;
 const ID_CODEC_ID: u64 = 0x86;
 const ID_VIDEO: u64 = 0xE0;
 const ID_PIXEL_WIDTH: u64 = 0xB0;
@@ -15,6 +21,14 @@ const ID_AUDIO: u64 = 0xE1;
 const ID_SAMPLING_FREQUENCY: u64 = 0xB5;
 const ID_CHANNELS: u64 = 0x9F;
 const ID_BIT_DEPTH: u64 = 0x6264;
+const ID_TAGS: u64 = 0x1254C367;
+const ID_TAG: u64 = 0x7373;
+const ID_TARGETS: u64 = 0x63C0;
+const ID_TAG_TRACK_UID: u64 = 0x63C5;
+const ID_SIMPLE_TAG: u64 = 0x67C8;
+const ID_TAG_NAME: u64 = 0x45A3;
+const ID_TAG_STRING: u64 = 0x4487;
+const ID_TAG_LANGUAGE: u64 = 0x447A;
 
 const TRACK_TYPE_VIDEO: u64 = 1;
 const TRACK_TYPE_AUDIO: u64 = 2;
@@ -28,16 +42,22 @@ pub fn parse_matroska(bytes: &[u8]) -> Result<ProbeDocument> {
     let segment = find_first(bytes, 0, bytes.len(), ID_SEGMENT)?
         .ok_or_else(|| RmpegError::InvalidData("missing Matroska Segment".to_string()))?;
     let segment_end = segment.end.unwrap_or(bytes.len());
-    find_first(bytes, segment.data_start, segment_end, ID_CLUSTER)?.ok_or_else(|| {
-        RmpegError::InvalidData("missing Matroska Cluster with media data".to_string())
-    })?;
-    let tracks = find_first(bytes, segment.data_start, segment_end, ID_TRACKS)?
+    let cluster =
+        find_first(bytes, segment.data_start, segment_end, ID_CLUSTER)?.ok_or_else(|| {
+            RmpegError::InvalidData("missing Matroska Cluster with media data".to_string())
+        })?;
+    let first_cluster_timecode = parse_cluster_timecode(bytes, cluster)?;
+    let duration_seconds = parse_segment_duration(bytes, segment.data_start, segment_end)?;
+    let (has_tags, tag_durations) =
+        parse_track_tag_durations(bytes, segment.data_start, segment_end)?;
+    let tracks = find_tracks(bytes, segment.data_start, segment_end)?
         .ok_or_else(|| RmpegError::InvalidData("missing Matroska Tracks".to_string()))?;
     let tracks_end = tracks
         .end
         .ok_or_else(|| RmpegError::InvalidData("Matroska Tracks has unknown size".to_string()))?;
 
-    let mut streams = Vec::new();
+    let mut parsed_tracks = Vec::new();
+    let mut saw_audio_video = false;
     let mut pos = tracks.data_start;
     while pos < tracks_end {
         let element = read_element(bytes, pos)?;
@@ -46,27 +66,249 @@ pub fn parse_matroska(bytes: &[u8]) -> Result<ProbeDocument> {
             let entry_end = element.end.ok_or_else(|| {
                 RmpegError::InvalidData("Matroska TrackEntry has unknown size".to_string())
             })?;
-            if let Some(stream) = parse_track_entry(bytes, element.data_start, entry_end)? {
-                streams.push(stream);
+            let outcome = parse_track_entry(bytes, element.data_start, entry_end)?;
+            if outcome.is_audio_video {
+                saw_audio_video = true;
+            }
+            if let Some(track) = outcome.track {
+                parsed_tracks.push(track);
             }
         }
         pos = next;
     }
 
-    if streams.is_empty() {
+    if parsed_tracks.is_empty() {
+        if !saw_audio_video {
+            return Ok(ProbeDocument {
+                format: "matroska".to_string(),
+                streams: Vec::new(),
+            });
+        }
         return Err(RmpegError::InvalidData(
             "Matroska file has no supported audio or video tracks".to_string(),
         ));
     }
 
-    for (index, stream) in streams.iter_mut().enumerate() {
+    let apply_segment_duration = !has_tags
+        && parsed_tracks.len() == 1
+        && first_cluster_timecode.is_some_and(|value| value != 0);
+    let mut streams = Vec::new();
+    for (index, track) in parsed_tracks.into_iter().enumerate() {
+        let mut stream = track.stream;
         stream.index = index;
+        if stream.duration_seconds.is_none()
+            && matches!(stream.codec_name.as_str(), "h264" | "hevc")
+        {
+            if let Some(duration) = track
+                .track_uid
+                .and_then(|track_uid| tag_durations.get(&track_uid).copied())
+            {
+                stream.duration_seconds = Some(duration);
+            }
+        }
+        if stream.duration_seconds.is_none()
+            && apply_segment_duration
+            && matches!(stream.codec_name.as_str(), "h264" | "hevc")
+        {
+            stream.duration_seconds = duration_seconds;
+        }
+        streams.push(stream);
     }
 
     Ok(ProbeDocument {
         format: "matroska".to_string(),
         streams,
     })
+}
+
+fn parse_segment_duration(bytes: &[u8], start: usize, end: usize) -> Result<Option<f64>> {
+    let Some(info) = find_first(bytes, start, end, ID_INFO)? else {
+        return Ok(None);
+    };
+    let info_end = info
+        .end
+        .ok_or_else(|| RmpegError::InvalidData("Matroska Info has unknown size".to_string()))?;
+    let mut timecode_scale = 1_000_000_u64;
+    let mut duration = None;
+    let mut pos = info.data_start;
+    while pos < info_end {
+        let element = read_element(bytes, pos)?;
+        let next = element.next_pos(info_end)?;
+        match element.id {
+            ID_TIMECODE_SCALE => timecode_scale = read_uint(bytes, element)?,
+            ID_DURATION => duration = Some(read_float(bytes, element)?),
+            _ => {}
+        }
+        pos = next;
+    }
+    Ok(duration.map(|duration| duration * timecode_scale as f64 / 1_000_000_000.0))
+}
+
+fn parse_cluster_timecode(bytes: &[u8], cluster: Element) -> Result<Option<u64>> {
+    let cluster_end = cluster.end.unwrap_or(bytes.len());
+    let mut pos = cluster.data_start;
+    while pos < cluster_end {
+        let element = read_element(bytes, pos)?;
+        let next = element.next_pos(cluster_end)?;
+        if element.id == ID_CLUSTER_TIMECODE {
+            return Ok(Some(read_uint(bytes, element)?));
+        }
+        pos = next;
+    }
+    Ok(None)
+}
+
+fn find_tracks(bytes: &[u8], start: usize, end: usize) -> Result<Option<Element>> {
+    if let Some(tracks) = find_first(bytes, start, end, ID_TRACKS)? {
+        return Ok(Some(tracks));
+    }
+
+    let scan_end = end.min(bytes.len());
+    for pos in start..scan_end.saturating_sub(3) {
+        if bytes.get(pos..pos + 4) != Some(&[0x16, 0x54, 0xAE, 0x6B]) {
+            continue;
+        }
+        let Ok(element) = read_element(bytes, pos) else {
+            continue;
+        };
+        if element.id == ID_TRACKS
+            && element
+                .end
+                .is_some_and(|element_end| element_end <= scan_end)
+        {
+            return Ok(Some(element));
+        }
+    }
+    Ok(None)
+}
+
+fn parse_track_tag_durations(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<(bool, HashMap<u64, f64>)> {
+    let mut has_tags = false;
+    let mut durations = HashMap::new();
+    let mut pos = start;
+    while pos < end {
+        let element = read_element(bytes, pos)?;
+        let next = element.next_pos(end)?;
+        if element.id == ID_TAGS {
+            has_tags = true;
+            let tags_end = element.end.ok_or_else(|| {
+                RmpegError::InvalidData("Matroska Tags has unknown size".to_string())
+            })?;
+            parse_tags(bytes, element.data_start, tags_end, &mut durations)?;
+        }
+        pos = next;
+    }
+    Ok((has_tags, durations))
+}
+
+fn parse_tags(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    durations: &mut HashMap<u64, f64>,
+) -> Result<()> {
+    let mut pos = start;
+    while pos < end {
+        let element = read_element(bytes, pos)?;
+        let next = element.next_pos(end)?;
+        if element.id == ID_TAG {
+            let tag_end = element.end.ok_or_else(|| {
+                RmpegError::InvalidData("Matroska Tag has unknown size".to_string())
+            })?;
+            parse_tag(bytes, element.data_start, tag_end, durations)?;
+        }
+        pos = next;
+    }
+    Ok(())
+}
+
+fn parse_tag(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    durations: &mut HashMap<u64, f64>,
+) -> Result<()> {
+    let mut track_uid = None;
+    let mut duration = None;
+    let mut pos = start;
+    while pos < end {
+        let element = read_element(bytes, pos)?;
+        let next = element.next_pos(end)?;
+        match element.id {
+            ID_TARGETS => {
+                let targets_end = element.end.ok_or_else(|| {
+                    RmpegError::InvalidData("Matroska Targets has unknown size".to_string())
+                })?;
+                track_uid = parse_tag_track_uid(bytes, element.data_start, targets_end)?;
+            }
+            ID_SIMPLE_TAG => {
+                let simple_tag_end = element.end.ok_or_else(|| {
+                    RmpegError::InvalidData("Matroska SimpleTag has unknown size".to_string())
+                })?;
+                if let Some(parsed_duration) =
+                    parse_simple_duration_tag(bytes, element.data_start, simple_tag_end)?
+                {
+                    duration.get_or_insert(parsed_duration);
+                }
+            }
+            _ => {}
+        }
+        pos = next;
+    }
+    if let (Some(track_uid), Some(duration)) = (track_uid, duration) {
+        durations.insert(track_uid, duration);
+    }
+    Ok(())
+}
+
+fn parse_tag_track_uid(bytes: &[u8], start: usize, end: usize) -> Result<Option<u64>> {
+    let mut pos = start;
+    while pos < end {
+        let element = read_element(bytes, pos)?;
+        let next = element.next_pos(end)?;
+        if element.id == ID_TAG_TRACK_UID {
+            return Ok(Some(read_uint(bytes, element)?));
+        }
+        pos = next;
+    }
+    Ok(None)
+}
+
+fn parse_simple_duration_tag(bytes: &[u8], start: usize, end: usize) -> Result<Option<f64>> {
+    let mut name = None;
+    let mut value = None;
+    let mut has_language = false;
+    let mut pos = start;
+    while pos < end {
+        let element = read_element(bytes, pos)?;
+        let next = element.next_pos(end)?;
+        match element.id {
+            ID_TAG_NAME => name = read_clean_ascii(bytes, element)?,
+            ID_TAG_STRING => value = read_clean_ascii(bytes, element)?,
+            ID_TAG_LANGUAGE => has_language = true,
+            _ => {}
+        }
+        pos = next;
+    }
+    if name == Some("DURATION") && !has_language {
+        return Ok(value.and_then(parse_duration_tag));
+    }
+    Ok(None)
+}
+
+fn parse_duration_tag(value: &str) -> Option<f64> {
+    let mut parts = value.split(':');
+    let hours = parts.next()?.parse::<f64>().ok()?;
+    let minutes = parts.next()?.parse::<f64>().ok()?;
+    let seconds = parts.next()?.parse::<f64>().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some(hours * 3600.0 + minutes * 60.0 + seconds)
 }
 
 fn require_matroska_doctype(bytes: &[u8]) -> Result<()> {
@@ -95,7 +337,7 @@ fn require_matroska_doctype(bytes: &[u8]) -> Result<()> {
     }
 }
 
-fn parse_track_entry(bytes: &[u8], start: usize, end: usize) -> Result<Option<StreamMetadata>> {
+fn parse_track_entry(bytes: &[u8], start: usize, end: usize) -> Result<TrackEntryOutcome> {
     let mut track = TrackBuilder::default();
     let mut pos = start;
     while pos < end {
@@ -106,6 +348,7 @@ fn parse_track_entry(bytes: &[u8], start: usize, end: usize) -> Result<Option<St
         })?;
         match element.id {
             ID_TRACK_TYPE => track.track_type = Some(read_uint(bytes, element)?),
+            ID_TRACK_UID => track.track_uid = Some(read_uint(bytes, element)?),
             ID_CODEC_ID => {
                 track.codec_id = Some(read_ascii(bytes, element)?.to_string());
             }
@@ -154,9 +397,20 @@ fn parse_audio(bytes: &[u8], start: usize, end: usize, track: &mut TrackBuilder)
     Ok(())
 }
 
+struct MatroskaTrack {
+    stream: StreamMetadata,
+    track_uid: Option<u64>,
+}
+
+struct TrackEntryOutcome {
+    track: Option<MatroskaTrack>,
+    is_audio_video: bool,
+}
+
 #[derive(Default)]
 struct TrackBuilder {
     track_type: Option<u64>,
+    track_uid: Option<u64>,
     codec_id: Option<String>,
     width: Option<u32>,
     height: Option<u32>,
@@ -166,18 +420,28 @@ struct TrackBuilder {
 }
 
 impl TrackBuilder {
-    fn into_stream(self) -> Result<Option<StreamMetadata>> {
+    fn into_stream(self) -> Result<TrackEntryOutcome> {
         let Some(track_type) = self.track_type else {
-            return Ok(None);
+            return Ok(TrackEntryOutcome {
+                track: None,
+                is_audio_video: false,
+            });
         };
+        let is_audio_video = matches!(track_type, TRACK_TYPE_VIDEO | TRACK_TYPE_AUDIO);
         let Some(codec_id) = self.codec_id else {
-            return Ok(None);
+            return Ok(TrackEntryOutcome {
+                track: None,
+                is_audio_video,
+            });
         };
         let Some(codec_name) = codec_name(&codec_id) else {
-            return Ok(None);
+            return Ok(TrackEntryOutcome {
+                track: None,
+                is_audio_video,
+            });
         };
 
-        match track_type {
+        let track = match track_type {
             TRACK_TYPE_VIDEO => {
                 let width = self.width.ok_or_else(|| {
                     RmpegError::InvalidData("Matroska video track missing PixelWidth".to_string())
@@ -185,31 +449,39 @@ impl TrackBuilder {
                 let height = self.height.ok_or_else(|| {
                     RmpegError::InvalidData("Matroska video track missing PixelHeight".to_string())
                 })?;
-                Ok(Some(StreamMetadata::video(
-                    0, codec_name, width, height, None, None,
-                )))
+                Some(MatroskaTrack {
+                    stream: StreamMetadata::video(0, codec_name, width, height, None, None),
+                    track_uid: self.track_uid,
+                })
             }
             TRACK_TYPE_AUDIO => {
                 let sample_rate = self.sample_rate.unwrap_or(8000);
                 let channels = self.channels.unwrap_or(1);
-                Ok(Some(StreamMetadata {
-                    index: 0,
-                    codec_type: "audio".to_string(),
-                    codec_name: codec_name.to_string(),
-                    sample_rate: Some(sample_rate),
-                    channels: Some(channels),
-                    bits_per_sample: Some(audio_bits_per_sample(
-                        codec_name,
-                        self.bits_per_sample.unwrap_or(0),
-                    )),
-                    duration_seconds: None,
-                    width: None,
-                    height: None,
-                    frame_rate: None,
-                }))
+                Some(MatroskaTrack {
+                    stream: StreamMetadata {
+                        index: 0,
+                        codec_type: "audio".to_string(),
+                        codec_name: codec_name.to_string(),
+                        sample_rate: Some(sample_rate),
+                        channels: Some(channels),
+                        bits_per_sample: Some(audio_bits_per_sample(
+                            codec_name,
+                            self.bits_per_sample.unwrap_or(0),
+                        )),
+                        duration_seconds: None,
+                        width: None,
+                        height: None,
+                        frame_rate: None,
+                    },
+                    track_uid: self.track_uid,
+                })
             }
-            _ => Ok(None),
-        }
+            _ => None,
+        };
+        Ok(TrackEntryOutcome {
+            track,
+            is_audio_video,
+        })
     }
 }
 
@@ -227,6 +499,8 @@ fn codec_name(codec_id: &str) -> Option<&'static str> {
         "V_AV1" => Some("av1"),
         "V_MPEG4/ISO/AVC" => Some("h264"),
         "V_MPEGH/ISO/HEVC" => Some("hevc"),
+        "V_PRORES" => Some("prores"),
+        "V_UNCOMPRESSED" => Some("rawvideo"),
         "A_OPUS" => Some("opus"),
         "A_VORBIS" => Some("vorbis"),
         "A_AAC" => Some("aac"),
@@ -234,6 +508,7 @@ fn codec_name(codec_id: &str) -> Option<&'static str> {
         "A_WAVPACK4" | "A_WAVPACK" => Some("wavpack"),
         "A_MPEG/L3" => Some("mp3"),
         "A_PCM/INT/LIT" => Some("pcm_s16le"),
+        "A_TTA1" => Some("tta"),
         _ => None,
     }
 }
@@ -296,6 +571,19 @@ fn read_ascii(bytes: &[u8], element: Element) -> Result<&str> {
         .end
         .ok_or_else(|| RmpegError::InvalidData("string element has unknown size".to_string()))?;
     std::str::from_utf8(&bytes[element.data_start..end])
+        .map_err(|_| RmpegError::InvalidData("Matroska string is not UTF-8".to_string()))
+}
+
+fn read_clean_ascii(bytes: &[u8], element: Element) -> Result<Option<&str>> {
+    let end = element
+        .end
+        .ok_or_else(|| RmpegError::InvalidData("string element has unknown size".to_string()))?;
+    let raw = &bytes[element.data_start..end];
+    if raw.contains(&0) {
+        return Ok(None);
+    }
+    std::str::from_utf8(raw)
+        .map(Some)
         .map_err(|_| RmpegError::InvalidData("Matroska string is not UTF-8".to_string()))
 }
 

@@ -24,6 +24,7 @@ use crate::{
     fits::{looks_like_fits, parse_fits},
     flac::parse_flac,
     flic::{looks_like_flic, parse_flic},
+    flv::{looks_like_flv, parse_flv},
     gif::{looks_like_gif, parse_gif},
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
     hevc::{looks_like_hevc_annex_b, parse_hevc_annex_b},
@@ -37,6 +38,7 @@ use crate::{
     mp3::parse_mp3,
     mp4::{looks_like_mp4, parse_mp4},
     mpeg4::{looks_like_mpeg4_visual, parse_mpeg4_visual},
+    mpegvideo::{looks_like_mpeg_video, parse_mpeg_video},
     mxf::{looks_like_mxf, parse_mxf},
     ogg::parse_ogg,
     osq::parse_osq,
@@ -96,6 +98,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_realmedia(bytes) {
         return parse_realmedia(bytes);
+    }
+
+    if looks_like_flv(bytes) {
+        return parse_flv(bytes);
     }
 
     if looks_like_adts_aac(bytes) {
@@ -284,6 +290,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_mpeg4_visual(bytes) {
         return parse_mpeg4_visual(bytes);
+    }
+
+    if looks_like_mpeg_video(bytes) {
+        return parse_mpeg_video(bytes);
     }
 
     if looks_like_hevc_annex_b(bytes) {
