@@ -10,6 +10,7 @@ use crate::{
     ivf::parse_ivf,
     jpeg::{looks_like_jpeg, parse_jpeg},
     jpeg2000::{looks_like_jpeg2000_codestream, parse_jpeg2000_codestream},
+    matroska::{looks_like_matroska, parse_matroska},
     mp3::parse_mp3,
     mp4::parse_mp4,
     ogg::parse_ogg,
@@ -98,6 +99,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_tga(bytes) {
         return parse_tga(bytes);
+    }
+
+    if looks_like_matroska(bytes) {
+        return parse_matroska(bytes);
     }
 
     if bytes.starts_with(b"DKIF") {

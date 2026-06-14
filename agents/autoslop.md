@@ -48,9 +48,10 @@ Rules:
 
 Good current targets:
 
-- Matroska/WebM metadata for VP8, VP9, Opus, and Vorbis.
+- Raw HEVC or VVC conformance bitstream metadata, if SPS parsing stays narrow.
+- WavPack or DTS header metadata clusters.
 - AAC and MP4 metadata correctness, especially `esds` edge cases.
-- TGA, TIFF, and remaining image metadata clusters with stable headers.
+- Remaining image metadata clusters with stable headers.
 - One skipped top-table decode/hash row, if it can be implemented honestly.
 
 Suggested local checks while iterating:
