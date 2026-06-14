@@ -63,3 +63,9 @@
 - Raw AMR-NB FATE durations mirror ffprobe's demuxer estimate from serialized frame bytes, not simply `frame_count * 0.02` for every mode. Modes 6 and 7 in particular match byte-size-derived rates of 10.4 kb/s and 12.4 kb/s.
 
 - The upstream probe comparator drops subtitle streams because rmpeg currently reports only audio/video stream metadata. Standalone text subtitle files can still pass honestly by returning the ffprobe demuxer format with an empty stream list. This must stay content-signature based because `probe(bytes)` has no filename or extension.
+
+- MP4 `mp4a` sample entries often lie or default to stereo/sample-entry rates. The `esds` DecoderSpecificInfo AudioSpecificConfig is the stronger oracle-facing source for AAC LC mono, Program Config Element channel counts, SBR extension sample rates, USAC explicit rates, and MP4 ALS identity.
+
+- AAC Program Config Elements are necessary for `channelConfiguration == 0`; count front/side/back coupled-pair elements as two channels and LFE as one. HE-AAC samples with SBR and a mono PCE are reported by ffprobe as stereo on this probe surface, so SBR mono should not be collapsed back to one channel.
+
+- MP4 ALS can appear under an `mp4a` sample entry with Audio Object Type 36. The ALS config in the FATE files embeds a small original WAVE header after the `ALS\0` marker, which is the simplest observed source for channels, sample rate, and bits per sample without decoding ALS frames.

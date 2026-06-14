@@ -1,3 +1,4 @@
+use crate::aac::{parse_audio_specific_config, AacAudioConfig};
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 
 #[derive(Debug, Clone, Copy)]
@@ -15,6 +16,7 @@ struct TrackBuilder {
     codec_name: Option<String>,
     sample_rate: Option<u32>,
     channels: Option<u16>,
+    bits_per_sample: Option<u16>,
     width: Option<u32>,
     height: Option<u32>,
 }
@@ -185,14 +187,19 @@ fn parse_stsd(data: &[u8], track: &mut TrackBuilder) -> Result<()> {
     track.codec_name = Some(codec_name(coding).to_string());
 
     match track.handler.as_ref() {
-        Some(b"soun") => parse_audio_sample_entry(data, 8, track)?,
+        Some(b"soun") => parse_audio_sample_entry(data, 8, entry_size, track)?,
         Some(b"vide") => parse_video_sample_entry(data, 8, track)?,
         _ => {}
     }
     Ok(())
 }
 
-fn parse_audio_sample_entry(data: &[u8], entry: usize, track: &mut TrackBuilder) -> Result<()> {
+fn parse_audio_sample_entry(
+    data: &[u8],
+    entry: usize,
+    entry_size: usize,
+    track: &mut TrackBuilder,
+) -> Result<()> {
     if data.len() < entry + 36 {
         return Err(RmpegError::UnexpectedEof {
             needed: entry + 36,
@@ -201,6 +208,7 @@ fn parse_audio_sample_entry(data: &[u8], entry: usize, track: &mut TrackBuilder)
     }
     track.channels = Some(read_u16(data, entry + 24)?);
     track.sample_rate = Some(read_u32(data, entry + 32)? >> 16);
+    track.bits_per_sample = Some(0);
     match track.codec_name.as_deref() {
         Some("amr_nb") => {
             track.channels = Some(1);
@@ -212,7 +220,135 @@ fn parse_audio_sample_entry(data: &[u8], entry: usize, track: &mut TrackBuilder)
         }
         _ => {}
     }
+    if track.codec_name.as_deref() == Some("aac") {
+        if let Some(config) = parse_audio_entry_config(data, entry, entry_size) {
+            apply_aac_config(track, config);
+        }
+    }
     Ok(())
+}
+
+fn parse_audio_entry_config(
+    data: &[u8],
+    entry: usize,
+    entry_size: usize,
+) -> Option<AacAudioConfig> {
+    let entry_end = entry.checked_add(entry_size)?;
+    if entry_end > data.len() {
+        return None;
+    }
+    let version = read_u16(data, entry + 16).ok()?;
+    let child_start = match version {
+        0 => entry.checked_add(36)?,
+        1 => entry.checked_add(52)?,
+        2 => entry.checked_add(72)?,
+        _ => entry.checked_add(36)?,
+    };
+    if child_start >= entry_end {
+        return None;
+    }
+
+    let mut pos = child_start;
+    while pos < entry_end {
+        let header = match next_box(data, pos, entry_end) {
+            Ok(Some(header)) => header,
+            Ok(None) | Err(_) => return None,
+        };
+        if &header.name == b"esds" {
+            return parse_esds_audio_config(&data[header.data_start..header.end]);
+        }
+        pos = header.end;
+    }
+    None
+}
+
+fn apply_aac_config(track: &mut TrackBuilder, config: AacAudioConfig) {
+    track.codec_name = Some(config.codec_name.to_string());
+    if let Some(sample_rate) = config.sample_rate {
+        track.sample_rate = Some(sample_rate);
+    }
+    if let Some(channels) = config.channels.filter(|channels| *channels != 0) {
+        track.channels = Some(channels);
+    }
+    if let Some(bits_per_sample) = config.bits_per_sample {
+        track.bits_per_sample = Some(bits_per_sample);
+    }
+}
+
+fn parse_esds_audio_config(data: &[u8]) -> Option<AacAudioConfig> {
+    let asc = find_decoder_specific_config(data, 4, data.len())?;
+    parse_audio_specific_config(asc)
+}
+
+fn find_decoder_specific_config(data: &[u8], mut pos: usize, end: usize) -> Option<&[u8]> {
+    while pos < end {
+        let tag = *data.get(pos)?;
+        pos += 1;
+        let (size, payload_start) = read_descriptor_len(data, pos)?;
+        let payload_end = payload_start.checked_add(size)?;
+        if payload_end > end {
+            return None;
+        }
+        match tag {
+            0x03 => {
+                let nested_start = es_descriptor_nested_start(data, payload_start, payload_end)?;
+                if let Some(config) = find_decoder_specific_config(data, nested_start, payload_end)
+                {
+                    return Some(config);
+                }
+            }
+            0x04 => {
+                let nested_start = payload_start.checked_add(13)?;
+                if nested_start <= payload_end {
+                    if let Some(config) =
+                        find_decoder_specific_config(data, nested_start, payload_end)
+                    {
+                        return Some(config);
+                    }
+                }
+            }
+            0x05 => return Some(&data[payload_start..payload_end]),
+            _ => {}
+        }
+        pos = payload_end;
+    }
+    None
+}
+
+fn es_descriptor_nested_start(
+    data: &[u8],
+    payload_start: usize,
+    payload_end: usize,
+) -> Option<usize> {
+    if payload_start + 3 > payload_end {
+        return None;
+    }
+    let flags = data[payload_start + 2];
+    let mut pos = payload_start + 3;
+    if flags & 0x80 != 0 {
+        pos = pos.checked_add(2)?;
+    }
+    if flags & 0x40 != 0 {
+        let url_len = usize::from(*data.get(pos)?);
+        pos = pos.checked_add(1 + url_len)?;
+    }
+    if flags & 0x20 != 0 {
+        pos = pos.checked_add(2)?;
+    }
+    (pos <= payload_end).then_some(pos)
+}
+
+fn read_descriptor_len(data: &[u8], mut pos: usize) -> Option<(usize, usize)> {
+    let mut size = 0_usize;
+    for _ in 0..4 {
+        let byte = *data.get(pos)?;
+        pos += 1;
+        size = size.checked_shl(7)?.checked_add(usize::from(byte & 0x7f))?;
+        if byte & 0x80 == 0 {
+            return Some((size, pos));
+        }
+    }
+    Some((size, pos))
 }
 
 fn parse_video_sample_entry(data: &[u8], entry: usize, track: &mut TrackBuilder) -> Result<()> {
@@ -292,7 +428,7 @@ impl TrackBuilder {
                 self.codec_name?,
                 self.sample_rate?,
                 self.channels?,
-                0,
+                self.bits_per_sample.unwrap_or(0),
                 duration_seconds.unwrap_or(0.0),
             ))
         } else if &handler == b"vide" {

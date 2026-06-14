@@ -32,6 +32,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - TGA image metadata probing for files with a TGA 2.0 footer
 - TIFF image metadata probing
 - conservative Matroska/WebM track metadata probing, including Opus/Vorbis compressed audio metadata
+- MP4 AAC/ALS `esds` metadata probing for AudioSpecificConfig sample rate, channels, and ALS bit depth
 - content-signature subtitle text probing for common standalone subtitle formats
 - raw HEVC Annex B bitstream metadata probing
 - narrow raw VVC Annex B bitstream metadata probing
