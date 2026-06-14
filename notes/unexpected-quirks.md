@@ -57,3 +57,7 @@
 - AMR-WB FATE `.awb` samples are 3GP/MP4 files with `sawb` sample entries, not raw `#!AMR-WB` files. The MP4 audio sample-entry fields can say stereo even though ffprobe reports mono AMR-WB at 16 kHz, so `samr`/`sawb` need codec-specific channel and sample-rate normalization.
 
 - Matroska `A_OPUS` tracks may carry an Audio `BitDepth` element such as 32, but ffprobe reports compressed Opus bit depth as 0. Treat lossy compressed Matroska audio bit depth as codec metadata, not container storage depth.
+
+- APE has old and new headers. Newer files store `blocks_per_frame`, `final_frame_blocks`, `total_frames`, bit depth, channels, and sample rate after the descriptor. Older 3.8/3.9 files keep channels/sample-rate near the front and derive block size from version and compression level: the FATE 3.8 low-compression files use 9,216 blocks per frame, while 3.9 or high-compression files use 73,728.
+
+- Raw AMR-NB FATE durations mirror ffprobe's demuxer estimate from serialized frame bytes, not simply `frame_count * 0.02` for every mode. Modes 6 and 7 in particular match byte-size-derived rates of 10.4 kb/s and 12.4 kb/s.

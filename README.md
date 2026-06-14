@@ -12,7 +12,9 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - sample rate, channels, bits per sample, data size, and duration estimate
 - a framemd5-like decode/hash path for PCM data
 - MP3 frame-header metadata probing
+- raw AMR-NB metadata probing
 - FLAC STREAMINFO metadata probing
+- Monkey's Audio / APE metadata probing
 - Ogg/Opus and Ogg/Vorbis header metadata probing, including truncated final-page duration handling
 - MP4/MOV track metadata probing for H.264 video and AAC or AMR audio
 - IVF metadata probing for VP8, VP9, and AV1 video
@@ -34,7 +36,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - narrow raw VVC Annex B bitstream metadata probing
 - WavPack metadata probing from raw blocks and Matroska tracks
 
-Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, AMR-NB, AMR-WB, WavPack, H.264, HEVC, VVC, VP8, VP9, AV1, Matroska/WebM, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, WavPack, H.264, HEVC, VVC, VP8, VP9, AV1, Matroska/WebM, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 

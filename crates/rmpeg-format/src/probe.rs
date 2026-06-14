@@ -2,6 +2,8 @@ use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 
 use crate::{
     aac::{looks_like_adts_aac, parse_adts_aac},
+    amr::parse_amr_nb,
+    ape::parse_ape,
     bmp::{looks_like_bmp, parse_bmp},
     dds::parse_dds,
     exr::{looks_like_exr, parse_exr},
@@ -54,6 +56,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"fLaC") {
         return parse_flac(bytes);
+    }
+
+    if bytes.starts_with(b"MAC ") {
+        return parse_ape(bytes);
+    }
+
+    if bytes.starts_with(b"#!AMR\n") {
+        return parse_amr_nb(bytes);
     }
 
     if bytes.starts_with(b"wvpk") {

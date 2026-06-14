@@ -1,4 +1,6 @@
 pub mod aac;
+pub mod amr;
+pub mod ape;
 pub mod bmp;
 pub mod dds;
 pub mod exr;
@@ -26,6 +28,8 @@ pub mod wavpack;
 pub mod webp;
 
 pub use aac::parse_adts_aac;
+pub use amr::parse_amr_nb;
+pub use ape::parse_ape;
 pub use bmp::parse_bmp;
 pub use dds::parse_dds;
 pub use exr::parse_exr;
