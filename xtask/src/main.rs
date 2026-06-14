@@ -33,6 +33,7 @@ fn run() -> io::Result<()> {
             python(&["harness/scripts/run_benchmarks.py"])
         }
         "site" => python(&["harness/scripts/render_site.py"]),
+        "ffprobe-oracle" => python(&["harness/scripts/run_ffmpeg_samples.py", "ffprobe-oracle"]),
         "ffmpeg-samples-sync" => python(&["harness/scripts/run_ffmpeg_samples.py", "sync"]),
         "ffmpeg-samples-check" => {
             build_release()?;
@@ -59,6 +60,7 @@ fn print_help() {
     println!("  fate-mini  run mirrored correctness tests");
     println!("  bench      run hyperfine benchmarks");
     println!("  site       render site/dist/index.html");
+    println!("  ffprobe-oracle        build the pinned ffprobe oracle for upstream samples");
     println!("  ffmpeg-samples-sync   sync upstream FFmpeg FATE samples with make fate-rsync");
     println!("  ffmpeg-samples-check  probe the synced FFmpeg FATE sample corpus");
     println!("  ffmpeg-samples        sync and probe the FFmpeg FATE sample corpus");

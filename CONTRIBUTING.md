@@ -87,13 +87,13 @@ Required tools:
 - Python 3
 - FFmpeg and ffprobe
 - hyperfine
-- git, make, and rsync for the upstream FFmpeg sample corpus
+- git, make, pkg-config, libxml2 development headers, and rsync for the upstream FFmpeg sample corpus
 
 On Ubuntu:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y ffmpeg git hyperfine make python3 rsync
+sudo apt-get install -y ffmpeg git hyperfine libxml2-dev make pkg-config python3 rsync
 ```
 
 Sync the upstream sample corpus:
@@ -103,6 +103,12 @@ cargo xtask ffmpeg-samples-sync
 ```
 
 This stores sample cache data under `.cache/ffmpeg/` by default.
+For reproducible upstream sample metrics, build and select the pinned ffprobe oracle:
+
+```bash
+cargo xtask ffprobe-oracle
+RMPEG_FFPROBE=.cache/ffmpeg/ffprobe-build/ffprobe cargo xtask ffmpeg-samples-check
+```
 
 ## Required Checks
 
@@ -113,7 +119,8 @@ cargo fmt --check
 cargo clippy --workspace -- -D warnings
 cargo test --workspace
 cargo xtask fate-mini
-cargo xtask ffmpeg-samples-check
+cargo xtask ffprobe-oracle
+RMPEG_FFPROBE=.cache/ffmpeg/ffprobe-build/ffprobe cargo xtask ffmpeg-samples-check
 cargo xtask bench
 cargo xtask site
 ```

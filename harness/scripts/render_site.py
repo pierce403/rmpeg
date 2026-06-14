@@ -234,6 +234,7 @@ def render_upstream_samples(report):
     rows = [
         ("Generated", escape(report.get("generated_at", "unknown"))),
         ("FFmpeg commit", escape(report.get("ffmpeg_commit", "unknown"))),
+        ("ffprobe version", escape(report.get("ffprobe_version", "unknown"))),
         ("Samples directory", f"<code>{escape(report.get('samples_dir', 'unknown'))}</code>"),
         ("Total files checked", str(total)),
         ("ffprobe accepted", str(summary.get("ffprobe_accepted", 0))),

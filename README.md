@@ -121,11 +121,18 @@ Sync the upstream FFmpeg FATE sample corpus with FFmpeg's own `make fate-rsync` 
 cargo xtask ffmpeg-samples-sync
 ```
 
-Probe every regular file in the synced FFmpeg sample corpus with `ffprobe` and `rmpeg-probe`,
-then write `site/data/upstream-samples.json`:
+Build the pinned ffprobe oracle used by CI and Pages:
 
 ```bash
-cargo xtask ffmpeg-samples-check
+cargo xtask ffprobe-oracle
+```
+
+Probe every regular file in the synced FFmpeg sample corpus with `ffprobe` and `rmpeg-probe`,
+then write `site/data/upstream-samples.json`. Set `RMPEG_FFPROBE` to use a specific
+ffprobe binary:
+
+```bash
+RMPEG_FFPROBE=.cache/ffmpeg/ffprobe-build/ffprobe cargo xtask ffmpeg-samples-check
 ```
 
 Run both upstream sample steps:
@@ -249,13 +256,13 @@ Linux with:
 - Python 3
 - FFmpeg and ffprobe
 - hyperfine
-- git, make, and rsync for `cargo xtask ffmpeg-samples`
+- git, make, pkg-config, libxml2 development headers, and rsync for `cargo xtask ffmpeg-samples`
 
 On Ubuntu, FFmpeg and hyperfine are available through apt on recent releases:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y ffmpeg git hyperfine make python3 rsync
+sudo apt-get install -y ffmpeg git hyperfine libxml2-dev make pkg-config python3 rsync
 ```
 
 The upstream FFmpeg sample command stores local artifacts under `.cache/ffmpeg/` by default.
@@ -269,6 +276,9 @@ cargo xtask ffmpeg-samples
 ```
 
 Use `RMPEG_FFMPEG_REPO` and `RMPEG_FFMPEG_REF` to point at a different FFmpeg remote or ref.
+Use `RMPEG_FFPROBE_REF`, `RMPEG_FFPROBE_SOURCE_DIR`, and `RMPEG_FFPROBE_BUILD_DIR`
+to control the pinned ffprobe oracle build. CI and Pages use FFmpeg `n8.0.1` with
+`--enable-libxml2`.
 Use `RMPEG_FFMPEG_SAMPLE_LIMIT=100 cargo xtask ffmpeg-samples-check` for a quick local smoke run.
 The `upstream-samples` GitHub Actions workflow can also be triggered manually to run this corpus
 check and upload `site/data/upstream-samples.json` plus a rendered site artifact.

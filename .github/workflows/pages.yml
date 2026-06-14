@@ -27,15 +27,17 @@ jobs:
       - name: Install system tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg hyperfine make python3 rsync
+          sudo apt-get install -y ffmpeg hyperfine libxml2-dev make pkg-config python3 rsync
 
       - name: Build generated site
         env:
+          RMPEG_FFPROBE: .cache/ffmpeg/ffprobe-build/ffprobe
           RMPEG_FATE_RSYNC_OPTIONS: "-rltLW --timeout=60"
         run: |
           cargo xtask samples
           cargo xtask reference
           cargo xtask fate-mini
+          cargo xtask ffprobe-oracle
           cargo xtask ffmpeg-samples
           cargo xtask bench
           cargo xtask site

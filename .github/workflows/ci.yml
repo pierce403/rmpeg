@@ -19,7 +19,7 @@ jobs:
       - name: Install system tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg hyperfine make python3 rsync
+          sudo apt-get install -y ffmpeg hyperfine libxml2-dev make pkg-config python3 rsync
 
       - name: Format
         run: cargo fmt --check
@@ -39,8 +39,12 @@ jobs:
       - name: Mirrored tests
         run: cargo xtask fate-mini
 
+      - name: Build pinned ffprobe oracle
+        run: cargo xtask ffprobe-oracle
+
       - name: Upstream FFmpeg sample corpus
         env:
+          RMPEG_FFPROBE: .cache/ffmpeg/ffprobe-build/ffprobe
           RMPEG_FATE_RSYNC_OPTIONS: "-rltLW --timeout=60"
         run: cargo xtask ffmpeg-samples
 

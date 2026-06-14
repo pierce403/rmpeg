@@ -20,7 +20,10 @@ jobs:
       - name: Install system tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg make python3 rsync
+          sudo apt-get install -y ffmpeg libxml2-dev make pkg-config python3 rsync
+
+      - name: Build pinned ffprobe oracle
+        run: cargo xtask ffprobe-oracle
 
       - name: Sync upstream FFmpeg FATE samples
         env:
@@ -29,6 +32,7 @@ jobs:
 
       - name: Check upstream FFmpeg FATE samples
         env:
+          RMPEG_FFPROBE: .cache/ffmpeg/ffprobe-build/ffprobe
           RMPEG_FFMPEG_SAMPLE_LIMIT: ${{ inputs.sample_limit }}
         run: cargo xtask ffmpeg-samples-check
 

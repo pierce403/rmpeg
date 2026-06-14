@@ -119,6 +119,7 @@ cargo test --workspace
 cargo xtask samples
 cargo xtask reference
 cargo xtask fate-mini
+cargo xtask ffprobe-oracle
 cargo xtask ffmpeg-samples-check
 cargo xtask bench
 cargo xtask site
@@ -134,6 +135,17 @@ jq -r '.tests[] | select(.ffprobe_returncode != 0 and .rmpeg_returncode == 0) | 
 
 Use `RMPEG_FFMPEG_SAMPLE_LIMIT=100 cargo xtask ffmpeg-samples-check` only as a
 smoke test. Full progress claims require the full corpus check.
+
+For reproducible upstream sample metrics, CI and Pages build FFmpeg `n8.0.1`
+with `--enable-libxml2` as the explicit ffprobe oracle:
+
+```bash
+cargo xtask ffprobe-oracle
+RMPEG_FFPROBE=.cache/ffmpeg/ffprobe-build/ffprobe cargo xtask ffmpeg-samples-check
+```
+
+The generated upstream sample JSON records `ffprobe_version`; always check it
+before comparing local and GitHub corpus results.
 
 ## Autoresearch Loop
 
