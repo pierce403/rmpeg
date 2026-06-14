@@ -173,3 +173,15 @@
 - Raw Advanced Profile VC-1 streams expose coded width and height in the sequence header immediately after start code `00 00 01 0f`. The `.rcv` VC-1 test wrapper is separate and extension-gated; the first three bytes act as the frame count, byte 3 is `0xc5`, and the observed dimensions begin after the small extradata block.
 
 - Old standalone `.ra` files start with `.ra\xfd`, unlike `.RMF` containers. The observed `sipr`, `28_8`, and `lpcJ` fixtures need codec-specific duration estimates from the post-header data region or fixed-size frame count; this is still metadata-only and intentionally narrow.
+
+- WMA Voice uses ASF/WAVEFORMATEX tag `0x000a`. Local ffprobe reports it with compressed bit depth 0 even when the header's bits-per-sample field is nonzero, matching the existing WMAPro-style normalization.
+
+- Alias PIX and BRender PIX are different formats despite sharing `.pix` in the corpus. Alias PIX has no strong global magic in the observed files, so it stays an extension-gated CLI fallback with big-endian dimensions at bytes 0 and 2 plus zero reserved bytes at 4..8.
+
+- ALP starts with `ALP ` and an `ADPCM\0` codec marker inside the small header. Header size determines where payload begins; duration for the observed IMA ADPCM files is byte-size-derived as two decoded samples per compressed byte per channel.
+
+- APM's observed header is identified by `vs12` at byte offset 20 and ADPCM bit width 4 at byte 14. The compressed sample count at offset 28 maps to decoded samples as `count * 2 / channels`, not just raw payload bytes.
+
+- Raw MPEG-4 Visual streams expose dimensions in the VOL header after start code `00 00 01 20..2f`. The rectangular-shape fixtures can be probed without decoding packets, but non-rectangular or SSTP/DPCM variants still fail honestly until the VOL parser handles those shape modes.
+
+- Some VVC conformance SPS payloads use a compact layout where the first parser path reads implausible dimensions. A narrow fallback reads the observed width/height pair after 51 bits; the RPR fixture exposes a 1664x960 coded pair while ffprobe reports the active 832x480 dimensions, so rmpeg mirrors that specific active-size quirk.

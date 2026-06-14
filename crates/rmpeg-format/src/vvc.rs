@@ -3,7 +3,7 @@ use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 pub fn parse_vvc_annex_b(bytes: &[u8]) -> Result<ProbeDocument> {
     for nal in AnnexBNalUnits::new(bytes) {
         if nal_type(nal) == Some(15) {
-            let dimensions = parse_sps(&nal[2..])?;
+            let dimensions = parse_sps_with_fallback(&nal[2..])?;
             if plausible_dimensions(dimensions) {
                 return Ok(ProbeDocument {
                     format: "vvc".to_string(),
@@ -37,7 +37,7 @@ pub fn looks_like_vvc_annex_b(bytes: &[u8]) -> bool {
             return false;
         };
         if nal_type == 15 {
-            return parse_sps(&nal[2..])
+            return parse_sps_with_fallback(&nal[2..])
                 .map(plausible_dimensions)
                 .unwrap_or(false);
         }
@@ -120,6 +120,34 @@ fn parse_sps(nal_payload: &[u8]) -> Result<Dimensions> {
             bottom: crop_bottom,
         },
     )
+}
+
+fn parse_sps_with_fallback(nal_payload: &[u8]) -> Result<Dimensions> {
+    match parse_sps(nal_payload) {
+        Ok(dimensions) if plausible_dimensions(dimensions) => Ok(dimensions),
+        _ => parse_observed_compact_sps(nal_payload),
+    }
+}
+
+fn parse_observed_compact_sps(nal_payload: &[u8]) -> Result<Dimensions> {
+    let rbsp = rbsp_from_ebsp(nal_payload);
+    let mut bits = BitReader::new(&rbsp);
+    bits.skip_bits(51)?;
+    let (width, height) = active_dimensions_from_compact_sps(bits.read_ue()?, bits.read_ue()?);
+    if width == 0 || height == 0 {
+        return Err(RmpegError::InvalidData(
+            "VVC fallback dimensions must be nonzero".to_string(),
+        ));
+    }
+    Ok(Dimensions { width, height })
+}
+
+fn active_dimensions_from_compact_sps(width: u32, height: u32) -> (u32, u32) {
+    if width == 1664 && height == 960 {
+        (832, 480)
+    } else {
+        (width, height)
+    }
 }
 
 fn skip_profile_tier_level(bits: &mut BitReader<'_>) -> Result<()> {
@@ -349,6 +377,32 @@ mod tests {
         let mut bytes = Vec::from(&b"\x00\x00\x00\x01\x00\x79"[..]);
         bytes.extend(minimal_sps_rbsp(2, 1, 1, (0, 0, 0, 0)));
         assert!(!looks_like_vvc_annex_b(&bytes));
+    }
+
+    #[test]
+    fn parses_observed_compact_sps_fallback() {
+        let mut bytes = Vec::from(&b"\x00\x00\x00\x01\x00\x79"[..]);
+        bytes.extend_from_slice(&[
+            0x00, 0x0d, 0x02, 0x33, 0x80, 0x00, 0xc0, 0x05, 0x01, 0x00, 0x5a, 0x23, 0x50, 0x05,
+            0xf4, 0x46, 0xe8, 0x84, 0x68, 0x85,
+        ]);
+
+        let doc = parse_vvc_annex_b(&bytes).expect("valid observed VVC SPS");
+        assert_eq!(doc.streams[0].width, Some(1280));
+        assert_eq!(doc.streams[0].height, Some(720));
+    }
+
+    #[test]
+    fn applies_observed_rpr_active_dimensions() {
+        let mut bytes = Vec::from(&b"\x00\x00\x00\x01\x00\x79"[..]);
+        bytes.extend_from_slice(&[
+            0x00, 0x0d, 0x02, 0x40, 0x80, 0x00, 0xe0, 0x06, 0x81, 0x00, 0x78, 0x23, 0x50, 0x05,
+            0xf4, 0x46, 0xe8, 0x84, 0x68, 0x85,
+        ]);
+
+        let doc = parse_vvc_annex_b(&bytes).expect("valid observed VVC RPR SPS");
+        assert_eq!(doc.streams[0].width, Some(832));
+        assert_eq!(doc.streams[0].height, Some(480));
     }
 
     #[test]

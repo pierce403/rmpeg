@@ -3,8 +3,10 @@ use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 use crate::{
     aac::{looks_like_adts_aac, parse_adts_aac},
     ac3::{looks_like_raw_ac3_or_eac3, parse_raw_ac3_or_eac3},
+    alp::{looks_like_alp, parse_alp},
     amr::parse_amr_nb,
     ape::parse_ape,
+    apm::{looks_like_apm, parse_apm},
     asf::{looks_like_asf, parse_asf},
     avi::{looks_like_avi, parse_avi},
     bethsoftvid::{looks_like_bethsoftvid, parse_bethsoftvid},
@@ -34,6 +36,7 @@ use crate::{
     mlp::{looks_like_mlp_or_truehd, parse_mlp_or_truehd},
     mp3::parse_mp3,
     mp4::{looks_like_mp4, parse_mp4},
+    mpeg4::{looks_like_mpeg4_visual, parse_mpeg4_visual},
     mxf::{looks_like_mxf, parse_mxf},
     ogg::parse_ogg,
     osq::parse_osq,
@@ -125,6 +128,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"OSQ ") {
         return parse_osq(bytes);
+    }
+
+    if looks_like_alp(bytes) {
+        return parse_alp(bytes);
+    }
+
+    if looks_like_apm(bytes) {
+        return parse_apm(bytes);
     }
 
     if bytes.starts_with(b"tBaK") {
@@ -269,6 +280,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_h264_annex_b(bytes) {
         return parse_h264_annex_b(bytes);
+    }
+
+    if looks_like_mpeg4_visual(bytes) {
+        return parse_mpeg4_visual(bytes);
     }
 
     if looks_like_hevc_annex_b(bytes) {

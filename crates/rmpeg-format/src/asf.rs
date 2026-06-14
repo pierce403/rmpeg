@@ -190,6 +190,7 @@ fn parse_audio_stream_data(wave: &[u8], metadata: &mut AsfMetadata) -> Result<()
     }
     let format_tag = read_u16_le(wave, 0)?;
     let codec_name = match format_tag {
+        0x000a => Some("wmavoice"),
         0x0163 => Some("wmalossless"),
         0x0162 => Some("wmapro"),
         0x0161 => Some("wmav2"),
@@ -365,6 +366,36 @@ mod tests {
                 ..
             }] => {
                 assert_eq!(*codec_name, "wmapro");
+                assert_eq!(*bits_per_sample, 0);
+            }
+            streams => panic!("unexpected streams: {streams:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_wmavoice_audio_tag() {
+        let mut metadata = AsfMetadata::default();
+        let wave = [
+            0x0a, 0x00, // WMA Voice
+            0x01, 0x00, // channels
+            0x40, 0x1f, 0x00, 0x00, // sample rate
+            0xe8, 0x03, 0x00, 0x00, // byte rate
+            0x2c, 0x01, // block align
+            0x10, 0x00, // header bits per sample
+        ];
+
+        parse_audio_stream_data(&wave, &mut metadata).unwrap();
+
+        match metadata.streams.as_slice() {
+            [AsfStream::Audio {
+                codec_name,
+                sample_rate,
+                channels,
+                bits_per_sample,
+            }] => {
+                assert_eq!(*codec_name, "wmavoice");
+                assert_eq!(*sample_rate, 8_000);
+                assert_eq!(*channels, 1);
                 assert_eq!(*bits_per_sample, 0);
             }
             streams => panic!("unexpected streams: {streams:?}"),
