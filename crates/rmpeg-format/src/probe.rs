@@ -21,6 +21,7 @@ use crate::{
     pnm::{looks_like_binary_pnm, parse_pnm},
     psd::{looks_like_psd, parse_psd},
     sgi::{looks_like_sgi, parse_sgi},
+    subtitle::{looks_like_subtitle, parse_subtitle},
     sunrast::{looks_like_sunrast, parse_sunrast},
     tga::{looks_like_tga, parse_tga},
     tiff::{looks_like_tiff, parse_tiff},
@@ -144,6 +145,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"OggS") {
         return parse_ogg(bytes);
+    }
+
+    if looks_like_subtitle(bytes) {
+        return parse_subtitle(bytes);
     }
 
     if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {

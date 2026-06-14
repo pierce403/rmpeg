@@ -25,11 +25,11 @@ jq '.summary.ffprobe_accepted' site/data/upstream-samples.json
 The public site reports the latest deployed GitHub Actions snapshot. Local
 numbers can differ slightly because ffprobe builds differ.
 
-Current local full-corpus snapshot from 2026-06-13 after APE and raw AMR-NB metadata probing:
+Current local full-corpus snapshot from 2026-06-13 after standalone subtitle text probing:
 
 ```text
-1313 / 2178 strict media matches = 60.3%
-1645 / 2511 total corpus passes, including files both ffprobe and rmpeg reject
+1342 / 2178 strict media matches = 61.6%
+1674 / 2511 total corpus passes, including files both ffprobe and rmpeg reject
 0 corpus errors
 1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
 ```

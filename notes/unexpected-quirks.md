@@ -61,3 +61,5 @@
 - APE has old and new headers. Newer files store `blocks_per_frame`, `final_frame_blocks`, `total_frames`, bit depth, channels, and sample rate after the descriptor. Older 3.8/3.9 files keep channels/sample-rate near the front and derive block size from version and compression level: the FATE 3.8 low-compression files use 9,216 blocks per frame, while 3.9 or high-compression files use 73,728.
 
 - Raw AMR-NB FATE durations mirror ffprobe's demuxer estimate from serialized frame bytes, not simply `frame_count * 0.02` for every mode. Modes 6 and 7 in particular match byte-size-derived rates of 10.4 kb/s and 12.4 kb/s.
+
+- The upstream probe comparator drops subtitle streams because rmpeg currently reports only audio/video stream metadata. Standalone text subtitle files can still pass honestly by returning the ffprobe demuxer format with an empty stream list. This must stay content-signature based because `probe(bytes)` has no filename or extension.

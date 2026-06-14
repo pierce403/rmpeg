@@ -32,11 +32,12 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - TGA image metadata probing for files with a TGA 2.0 footer
 - TIFF image metadata probing
 - conservative Matroska/WebM track metadata probing, including Opus/Vorbis compressed audio metadata
+- content-signature subtitle text probing for common standalone subtitle formats
 - raw HEVC Annex B bitstream metadata probing
 - narrow raw VVC Annex B bitstream metadata probing
 - WavPack metadata probing from raw blocks and Matroska tracks
 
-Compressed decode is not implemented yet. MP3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, WavPack, H.264, HEVC, VVC, VP8, VP9, AV1, Matroska/WebM, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, WavPack, H.264, HEVC, VVC, VP8, VP9, AV1, Matroska/WebM, subtitles, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
