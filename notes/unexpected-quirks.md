@@ -161,3 +161,15 @@
 - ASF MSS2 video uses the normal ASF Stream Properties object, but the video type-specific payload has an 11-byte prefix before the BITMAPINFOHEADER. The `MSS2` compression fourcc starts at payload offset 27, not at a naturally aligned DWORD offset. WMAPro in the same container reports compressed audio bit depth as 0 even when the WAVEFORMATEX field says 24.
 
 - RealMedia `.RMF` stream metadata lives in `MDPR` chunks. The type-specific payloads carry observable codec tags such as `VIDORV20`, `sipr`, `cook`, `28_8`, and `lpcJ`; old standalone `.ra` files and RALF-in-RMVB remain separate unsupported cases.
+
+- ASF G2M video uses the same payload shape as MSS2, with `G2M2`/`G2M3`/`G2M4` fourccs at video payload offset 27. The truncated `g2m3.asf` fixture still fails because FFprobe derives stream duration from packet timing while rmpeg currently falls back to a byte-size ASF estimate.
+
+- QOA files start with `qoaf`, a big-endian total sample count, then first-frame channels and a 24-bit sample rate. Duration is simply total samples divided by that first-frame sample rate for the observed corpus.
+
+- FLIC files have their magic at byte offset 4 (`0xaf11` or `0xaf12`), not at the front. Width and height are little-endian 16-bit fields at offsets 8 and 10, and the `.dat` FATE fixture is still FLIC despite the generic extension.
+
+- RenderWare TXD files do not have a strong standalone magic for safe byte-only probing. The current parser is enabled only through the `.txd` CLI extension fallback and reads the observed texture width/height at offsets 132 and 134.
+
+- Raw Advanced Profile VC-1 streams expose coded width and height in the sequence header immediately after start code `00 00 01 0f`. The `.rcv` VC-1 test wrapper is separate and extension-gated; the first three bytes act as the frame count, byte 3 is `0xc5`, and the observed dimensions begin after the small extradata block.
+
+- Old standalone `.ra` files start with `.ra\xfd`, unlike `.RMF` containers. The observed `sipr`, `28_8`, and `lpcJ` fixtures need codec-specific duration estimates from the post-header data region or fixed-size frame count; this is still metadata-only and intentionally narrow.

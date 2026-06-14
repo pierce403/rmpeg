@@ -21,6 +21,7 @@ use crate::{
     exr::{looks_like_exr, parse_exr},
     fits::{looks_like_fits, parse_fits},
     flac::parse_flac,
+    flic::{looks_like_flic, parse_flic},
     gif::{looks_like_gif, parse_gif},
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
     hevc::{looks_like_hevc_annex_b, parse_hevc_annex_b},
@@ -39,6 +40,7 @@ use crate::{
     png::{looks_like_png, parse_png},
     pnm::{looks_like_binary_pnm, parse_pnm},
     psd::{looks_like_psd, parse_psd},
+    qoa::{looks_like_qoa, parse_qoa},
     realmedia::{looks_like_realmedia, parse_realmedia},
     sgi::{looks_like_sgi, parse_sgi},
     smjpeg::{looks_like_smjpeg, parse_smjpeg},
@@ -49,6 +51,7 @@ use crate::{
     tiff::{looks_like_tiff, parse_tiff},
     tta::parse_tta,
     tty::{looks_like_tty, parse_tty},
+    vc1::{looks_like_raw_vc1, parse_raw_vc1},
     voc::{looks_like_voc, parse_voc},
     vvc::{looks_like_vvc_annex_b, parse_vvc_annex_b},
     wav::parse_wav,
@@ -208,6 +211,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_gif(bytes);
     }
 
+    if looks_like_flic(bytes) {
+        return parse_flic(bytes);
+    }
+
+    if looks_like_qoa(bytes) {
+        return parse_qoa(bytes);
+    }
+
     if looks_like_bmp(bytes) {
         return parse_bmp(bytes);
     }
@@ -266,6 +277,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_vvc_annex_b(bytes) {
         return parse_vvc_annex_b(bytes);
+    }
+
+    if looks_like_raw_vc1(bytes) {
+        return parse_raw_vc1(bytes);
     }
 
     if looks_like_binary_pnm(bytes) {

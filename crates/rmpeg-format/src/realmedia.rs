@@ -6,6 +6,9 @@ pub fn parse_realmedia(bytes: &[u8]) -> Result<ProbeDocument> {
             "missing RealMedia header".to_string(),
         ));
     }
+    if looks_like_realaudio(bytes) {
+        return parse_realaudio(bytes);
+    }
 
     let mut streams = Vec::new();
     let mut pos = 0;
@@ -36,7 +39,75 @@ pub fn parse_realmedia(bytes: &[u8]) -> Result<ProbeDocument> {
 }
 
 pub fn looks_like_realmedia(bytes: &[u8]) -> bool {
-    bytes.starts_with(b".RMF")
+    bytes.starts_with(b".RMF") || looks_like_realaudio(bytes)
+}
+
+fn looks_like_realaudio(bytes: &[u8]) -> bool {
+    bytes.starts_with(b".ra\xfd")
+}
+
+fn parse_realaudio(bytes: &[u8]) -> Result<ProbeDocument> {
+    let (codec_name, sample_rate, duration_seconds) = if let Some(tag) = find_bytes(bytes, b"sipr")
+    {
+        let data_start = tag + 11;
+        if data_start > bytes.len() {
+            return Err(RmpegError::UnexpectedEof {
+                needed: data_start,
+                remaining: bytes.len(),
+            });
+        }
+        let sample_rate = if bytes.windows(2).any(|value| value == [0x3e, 0x80]) {
+            16_000
+        } else {
+            8_000
+        };
+        (
+            "sipr",
+            sample_rate,
+            (bytes.len() - data_start) as f64 / 2_000.0,
+        )
+    } else if let Some(tag) = find_bytes(bytes, b"28_8") {
+        let data_start = tag + 11;
+        if data_start > bytes.len() {
+            return Err(RmpegError::UnexpectedEof {
+                needed: data_start,
+                remaining: bytes.len(),
+            });
+        }
+        let frame_size = read_u32_be(bytes, 24)?;
+        if frame_size == 0 {
+            return Err(RmpegError::InvalidData(
+                "RealAudio frame size is zero".to_string(),
+            ));
+        }
+        let frames = (bytes.len() - data_start) as f64 / frame_size as f64;
+        ("ra_288", 8_000, frames * 0.02)
+    } else if let Some(tag) = find_bytes(bytes, b"lpcJ") {
+        let data_start = tag + 4;
+        if data_start > bytes.len() {
+            return Err(RmpegError::UnexpectedEof {
+                needed: data_start,
+                remaining: bytes.len(),
+            });
+        }
+        ("ra_144", 8_000, (bytes.len() - data_start) as f64 / 1_000.0)
+    } else {
+        return Err(RmpegError::InvalidData(
+            "unsupported RealAudio header".to_string(),
+        ));
+    };
+
+    Ok(ProbeDocument {
+        format: "rm".to_string(),
+        streams: vec![StreamMetadata::audio(
+            0,
+            codec_name,
+            sample_rate,
+            1,
+            0,
+            duration_seconds,
+        )],
+    })
 }
 
 fn parse_mdpr(data: &[u8], index: usize) -> Result<Option<StreamMetadata>> {
@@ -197,5 +268,17 @@ mod tests {
             parse_audio_type_data(b".ra\xfd\0\0\x3e\x80siprsipr", 0, 2.0).expect("valid audio");
         assert_eq!(stream.codec_name, "sipr");
         assert_eq!(stream.sample_rate, Some(16_000));
+    }
+
+    #[test]
+    fn parses_old_ra_288_duration_from_frames() {
+        let mut bytes = vec![0; 73 + 76];
+        bytes[0..4].copy_from_slice(b".ra\xfd");
+        bytes[24..28].copy_from_slice(&38_u32.to_be_bytes());
+        bytes[62..66].copy_from_slice(b"28_8");
+
+        let doc = parse_realaudio(&bytes).expect("valid old realaudio");
+        assert_eq!(doc.streams[0].codec_name, "ra_288");
+        assert_eq!(doc.streams[0].duration_seconds, Some(0.04));
     }
 }

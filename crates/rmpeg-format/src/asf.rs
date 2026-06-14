@@ -229,6 +229,7 @@ fn parse_video_stream_data(video: &[u8], metadata: &mut AsfMetadata) -> Result<(
     }
     let codec_name = match &video[27..31] {
         b"MSS2" => "mss2",
+        b"G2M2" | b"G2M3" | b"G2M4" => "g2m",
         _ => return Ok(()),
     };
     let width = read_u32_le(video, 0)?;
@@ -365,6 +366,30 @@ mod tests {
             }] => {
                 assert_eq!(*codec_name, "wmapro");
                 assert_eq!(*bits_per_sample, 0);
+            }
+            streams => panic!("unexpected streams: {streams:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_observed_g2m_video_tags() {
+        let mut metadata = AsfMetadata::default();
+        let mut payload = vec![0; 64];
+        payload[0..4].copy_from_slice(&1280u32.to_le_bytes());
+        payload[4..8].copy_from_slice(&1024u32.to_le_bytes());
+        payload[27..31].copy_from_slice(b"G2M4");
+
+        parse_video_stream_data(&payload, &mut metadata).unwrap();
+
+        match metadata.streams.as_slice() {
+            [AsfStream::Video {
+                codec_name,
+                width,
+                height,
+            }] => {
+                assert_eq!(*codec_name, "g2m");
+                assert_eq!(*width, 1280);
+                assert_eq!(*height, 1024);
             }
             streams => panic!("unexpected streams: {streams:?}"),
         }
