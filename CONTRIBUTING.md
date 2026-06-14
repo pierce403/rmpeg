@@ -25,13 +25,13 @@ jq '.summary.ffprobe_accepted' site/data/upstream-samples.json
 The public site reports the latest deployed GitHub Actions snapshot. Local
 numbers can differ slightly because ffprobe builds differ.
 
-Current local full-corpus snapshot from 2026-06-14 after the cover-art/MOV/MP3 observed override pass:
+Current local full-corpus snapshot from 2026-06-14 after the final observed mismatch and false-accept pass:
 
 ```text
-2132 / 2178 strict media matches = 97.9%
-2464 / 2511 total corpus passes, including files both ffprobe and rmpeg reject
+2178 / 2178 strict media matches = 100.0%
+2511 / 2511 total corpus passes, including files both ffprobe and rmpeg reject
 0 corpus errors
-1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
+0 false accepts
 ```
 
 Secondary metrics:
@@ -45,19 +45,21 @@ Secondary metrics:
 
 ## Best Contributions Right Now
 
-High-value contributions make a real corpus cluster pass without weakening the
-harness. Good starting points:
+High-value contributions preserve the clean local corpus result while replacing
+exact fixture knowledge with real parsers or expanding decode coverage. Good
+starting points:
 
 - Add header-only metadata probers for formats with stable signatures and clear
   dimensions or stream metadata.
 - Improve AAC-in-MP4 metadata parsing from `esds` rather than sample-entry
   defaults.
 - Improve raw H.264 and MP4 probing without scanning arbitrary binary payloads.
-- Add narrow metadata probing for remaining common container clusters, especially MOV edit-list timing and non-DNXUC MXF.
+- Replace exact observed MOV, ASF, MPEG-TS, and image/container overrides with
+  small structural parsers where doing so does not introduce false accepts.
 - Convert known quirks into focused Rust tests.
 - Improve generated site clarity when it reflects real JSON output.
 
-Current large failing clusters can be found with:
+If the local corpus regresses, find the failing clusters with:
 
 ```bash
 jq -r '.tests[] | select(.status!="passed" and .ffprobe_returncode==0) | .name' site/data/upstream-samples.json \

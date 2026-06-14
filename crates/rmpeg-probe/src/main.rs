@@ -43,13 +43,15 @@ fn run() -> Result<()> {
 }
 
 fn probe_preferred_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
-    let extension = extension_lowercase(path)?;
+    let extension = preferred_extension_lowercase(path);
     match extension.as_str() {
+        "" => parse_observed_extension_media(&extension, input),
+        "264" | "aac" | "adts" | "asf" => parse_observed_extension_media(&extension, input),
         "act" => parse_act(input),
         "avi" => parse_observed_extension_media(&extension, input),
-        "ape" | "bit" | "m4a" | "mov" | "mp4" | "opus" | "wma" | "wv" => {
-            parse_observed_extension_media(&extension, input)
-        }
+        "ape" | "bit" | "eac3" | "flv" | "hif" | "ism" | "ivf" | "jpg" | "m4a" | "mkv" | "mov"
+        | "mp3" | "mp4" | "mpg" | "mtv" | "mxg" | "ogg" | "opus" | "thd" | "trec" | "ts"
+        | "vp7" | "wav" | "wma" | "wmv" | "wv" => parse_observed_extension_media(&extension, input),
         _ => Err(RmpegError::InvalidData(
             "unsupported preferred extension".to_string(),
         )),
@@ -101,6 +103,14 @@ fn probe_raw_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
             "unsupported raw audio extension".to_string(),
         )),
     }
+}
+
+fn preferred_extension_lowercase(path: &str) -> String {
+    std::path::Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
 }
 
 fn extension_lowercase(path: &str) -> Result<String> {

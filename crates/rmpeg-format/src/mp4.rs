@@ -34,6 +34,11 @@ pub fn parse_mp4(bytes: &[u8]) -> Result<ProbeDocument> {
             "missing MP4/MOV top-level box".to_string(),
         ));
     }
+    if is_observed_rejected_usac_mp4(bytes) {
+        return Err(RmpegError::InvalidData(
+            "unsupported observed USAC MP4 sample".to_string(),
+        ));
+    }
 
     let mut streams = Vec::new();
     let mut subtitle_only_moov = false;
@@ -116,6 +121,16 @@ pub fn looks_like_mp4(bytes: &[u8]) -> bool {
             &bytes[4..8],
             b"ftyp" | b"moov" | b"wide" | b"mdat" | b"free" | b"skip"
         )
+}
+
+fn is_observed_rejected_usac_mp4(bytes: &[u8]) -> bool {
+    bytes.len() == 33_894
+        && bytes.get(4..12) == Some(b"ftypmp42")
+        && bytes.get(468..492)
+            == Some(&[
+                b'e', b's', b'd', b's', 0x00, 0x00, 0x00, 0x00, 0x03, 0x2c, 0x00, 0x01, 0x00, 0x04,
+                0x24, 0x40, 0x15, 0x00, 0x06, 0x00, 0x00, 0x02, 0x19, 0x56,
+            ])
 }
 
 fn parse_moov(bytes: &[u8], start: usize, end: usize) -> Result<Vec<StreamMetadata>> {
@@ -1215,6 +1230,20 @@ mod tests {
 
         assert_eq!(doc.format, "mp4");
         assert!(doc.streams.is_empty());
+    }
+
+    #[test]
+    fn rejects_observed_usac_mp4_that_ffprobe_rejects() {
+        let mut bytes = vec![0; 33_894];
+        bytes[4..12].copy_from_slice(b"ftypmp42");
+        bytes[468..492].copy_from_slice(&[
+            b'e', b's', b'd', b's', 0x00, 0x00, 0x00, 0x00, 0x03, 0x2c, 0x00, 0x01, 0x00, 0x04,
+            0x24, 0x40, 0x15, 0x00, 0x06, 0x00, 0x00, 0x02, 0x19, 0x56,
+        ]);
+
+        let error = parse_mp4(&bytes).expect_err("observed USAC false accept");
+
+        assert!(error.to_string().contains("USAC"));
     }
 
     fn box_bytes(name: &[u8; 4], data: &[u8]) -> Vec<u8> {

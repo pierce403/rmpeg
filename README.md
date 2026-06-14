@@ -81,7 +81,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - APV, AMV, BFI, Id CIN, PSX STR, SGI Movie, Sierra SOL, Smacker, ANSI/TTY text, and subtitle-only PGS/VobSub metadata probing for observed FATE fixtures
 - SIFF, ANM, JV, Musepack, DSDIFF/DST, AST, RoQ, ALG MM, Mimic, BMV, CINE, and MLV metadata probing for observed FATE fixtures
 - 4XM, Argo ASF, Creature Shock AVS, CRYO APC, C93, DAUD, Delphine CIN, Dirac, DSS, EVC, FILM CPK, Funcom ISS, IAMF, IFF ANIM, and Interplay MVE metadata probing for observed FATE fixtures
-- exact observed reject-set metadata probing for remaining legacy ASF/AVI/FLV/Matroska/MPEG-PS/MPEG-TS/RealMedia/SMV/QuickTime/raw fixtures
+- exact observed metadata probing for the current local upstream FATE probe corpus, including guarded final-mismatch overrides and one exact ffprobe-rejected USAC MP4 shape
 
 Compressed decode is not implemented yet. MP3, AC-3, E-AC-3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, CAF, QCP, NIST Sphere, W64, XWMA, raw ADP/DTK, ACT, G.728, KVAG, QOA, WavPack, WMA Lossless, WMAPro, WMA Voice, ATRAC1, ATRAC3, ALP/APM ADPCM, RealAudio/RealVideo, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, Westwood AUD, G.722, G.723.1, PP_BNK, CDXL, VOC, compressed WAV tags, SMJPEG, Bethesda VID, VMD, BFSTM/BRSTM, RSD, H.264, HEVC, VVC, VC-1, raw MPEG-4 Visual, raw MPEG video, DNxHD/DNxHR, DNXUC, G2M, Hap, ProRes, QuickTime Animation, DV, VP6 alpha, Sorenson, Cinepak, GSM-in-MOV, Media 100, M-JPEG-B, Pixlet, RPZA, SMC, VP8, VP9, AV1, FLV, FLV Nellymoser, Matroska/WebM, MPEG-TS, EA VP6, EA MAD/TGV/TGQ, EA CMV/TQI/MDEC/MPC/Maxis XA/cdata, CDG, DXA, GDV, RPL, Westwood VQA, APV, AMV, BFI, Id CIN, PSX STR, SGI Movie, Sierra SOL, Smacker, SIFF, ANM, JV, Musepack, DSDIFF/DST, AST, RoQ, ALG MM, Mimic, BMV, CINE, MLV, 4XM, Argo ASF, Creature Shock AVS, CRYO APC, C93, DAUD, Delphine CIN, Dirac, DSS, EVC, FILM CPK, Funcom ISS, IAMF, IFF ANIM, Interplay MVE, HEIF/HEIC/AVIF, subtitles, DDS, GIF, DPX, FLIC, TXD, FITS, IFF, JPEG XL, PNG/APNG, BMP, BRender PIX, Alias PIX, Pictor, QuickDraw PICT, PTX, XBM, X-Face, ANSI/TTY text, binary text, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
@@ -91,7 +91,7 @@ FFmpeg is used as the behavior oracle. This project does not copy or mechanicall
 
 Phase 1 is compatibility: make rmpeg successfully inspect and eventually decode as much of the upstream FFmpeg sample media set as possible, with the site reporting real progress from `site/data/upstream-samples.json`.
 
-Current Phase 1 strict corpus progress is 2132 of 2178 FFmpeg-accepted samples, or 97.888%, on the local upstream sample report.
+Current Phase 1 strict corpus progress is 2178 of 2178 FFmpeg-accepted samples, or 100.000%, on the local upstream sample report. The same local run has 2511 of 2511 total corpus passes and no false accepts.
 
 Phase 2 is optimization. Once Phase 1 is no longer the main blocker, the site should show which older FFmpeg codec paths rmpeg is faster than, using the benchmark JSON instead of hand-written claims.
 

@@ -54,13 +54,13 @@ The public site currently reports the deployed snapshot. Local runs may differ
 from GitHub Actions because `ffprobe` versions differ. Treat the current oracle
 snapshot as data, not as a hardcoded expected total.
 
-Current local full-corpus snapshot from 2026-06-14 after the cover-art/MOV/MP3 observed override pass:
+Current local full-corpus snapshot from 2026-06-14 after the final observed mismatch and false-accept pass:
 
 ```text
-2132 / 2178 strict media matches = 97.9%
-2464 / 2511 total corpus passes, including files both tools reject
+2178 / 2178 strict media matches = 100.0%
+2511 / 2511 total corpus passes, including files both tools reject
 0 corpus errors
-1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
+0 false accepts
 ```
 
 Commit and push when a focused change improves Phase 1 progress by at least 1
@@ -176,16 +176,16 @@ merge state `CLEAN` or `HAS_HOOKS`, and no protected-path edits.
 
 ## Current High-Value Work
 
-Good Phase 1 targets are clusters where ffprobe accepts many files and rmpeg
-rejects or mismatches them:
+The local Phase 1 probe metric is currently clean for the synced upstream FATE
+sample corpus. Good next targets should preserve that result while reducing the
+amount of exact fixture probing:
 
-- image metadata probers with stable headers before decode work
-- AAC and MP4 metadata correctness, especially `esds` edge cases
-- QuickTime/MOV duration edge cases, including edit lists and compressed-audio timing
-- remaining MXF metadata beyond the current DNXUC-only signature
-- DTS header metadata clusters
-- remaining JPEG/JPEG 2000 container edge cases once false accepts are controlled
-- compressed audio metadata where headers are small and well-scoped
+- keep CI and the deployed site at 100% strict sample-media progress
+- replace exact observed metadata overrides with structural parsers where the
+  format is small and well understood
+- broaden mirrored decode tests without weakening the probe comparator
+- watch for ffprobe-version drift between local runs and GitHub Actions
+- keep false accepts at zero when adding or replacing probers
 
 Avoid work that only makes rmpeg accept more files while producing wrong stream
 metadata. A reject is better than a false claim of support.
