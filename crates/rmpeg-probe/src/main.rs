@@ -4,8 +4,8 @@ use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 use rmpeg_format::{
     parse_act, parse_aea, parse_alg_mm, parse_alias_pix, parse_bintext, parse_bmv, parse_cdg,
     parse_cdxl, parse_creatureshock_avs, parse_cyberia_c93, parse_daud, parse_delphine_cin,
-    parse_ea_cdata, parse_evc, parse_funcom_iss, parse_jxl, parse_mimic_cam, parse_pgs_sup,
-    parse_pict, parse_pp_bnk, parse_raw_ac3_or_eac3_scanning, parse_raw_adp_dtk,
+    parse_ea_cdata, parse_evc, parse_funcom_iss, parse_imf_cpl, parse_jxl, parse_mimic_cam,
+    parse_pgs_sup, parse_pict, parse_pp_bnk, parse_raw_ac3_or_eac3_scanning, parse_raw_adp_dtk,
     parse_raw_adp_dtk_dec, parse_raw_adp_dtk_pcm, parse_raw_g722, parse_raw_g723_1, parse_raw_g728,
     parse_txd, parse_vc1_rcv, parse_vmd, parse_vobsub_mpeg, parse_westwood_aud, parse_xface, probe,
 };
@@ -69,6 +69,7 @@ fn probe_raw_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
         "cin" => parse_delphine_cin(input),
         "evc" => parse_evc(input),
         "iss" => parse_funcom_iss(input),
+        "xml" => parse_imf_cpl(input),
         "jxl" => parse_jxl(input),
         "mm" => parse_alg_mm(input),
         "sup" => parse_pgs_sup(input),

@@ -168,7 +168,7 @@ pub use kvag::parse_kvag;
 pub use legacy_media::{
     parse_argo_asf, parse_creatureshock_avs, parse_cryo_apc, parse_cyberia_c93, parse_daud,
     parse_delphine_cin, parse_dirac, parse_dss, parse_evc, parse_film_cpk, parse_funcom_iss,
-    parse_iamf, parse_interplay_mve,
+    parse_iamf, parse_imf_cpl, parse_interplay_mve,
 };
 pub use matroska::parse_matroska;
 pub use mimic::parse_mimic_cam;

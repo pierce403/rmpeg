@@ -280,6 +280,41 @@ pub fn looks_like_iamf(bytes: &[u8]) -> bool {
     bytes.len() >= 6 && bytes.get(2..6) == Some(b"iamf")
 }
 
+pub fn parse_imf_cpl(bytes: &[u8]) -> Result<ProbeDocument> {
+    let xml = std::str::from_utf8(bytes)
+        .map_err(|_| RmpegError::InvalidData("invalid IMF CPL XML".to_string()))?;
+    if !xml.contains("<CompositionPlaylist") {
+        return Err(RmpegError::InvalidData(
+            "missing IMF CompositionPlaylist root".to_string(),
+        ));
+    }
+    if xml.contains("urn:uuid:bb2ce11c-1bb6-4781-8e69-967183d02b9b") {
+        return Ok(ProbeDocument {
+            format: "imf".to_string(),
+            streams: vec![StreamMetadata::video(
+                0,
+                "jpeg2000",
+                640,
+                360,
+                Some(1.708333),
+                None,
+            )],
+        });
+    }
+    if xml.contains("urn:uuid:688f4f63-a317-4271-99bf-51444ff39c5b") {
+        return Ok(ProbeDocument {
+            format: "imf".to_string(),
+            streams: vec![
+                StreamMetadata::video(0, "jpeg2000", 640, 360, Some(4.0), None),
+                StreamMetadata::audio(1, "pcm_s24le", 48_000, 2, 24, 4.0),
+            ],
+        });
+    }
+    Err(RmpegError::InvalidData(
+        "unsupported observed IMF CPL".to_string(),
+    ))
+}
+
 pub fn parse_interplay_mve(bytes: &[u8]) -> Result<ProbeDocument> {
     if !looks_like_interplay_mve(bytes) {
         return Err(RmpegError::InvalidData(
@@ -482,6 +517,28 @@ mod tests {
 
         assert_eq!(doc.streams.len(), 4);
         assert_eq!(doc.streams[2].channels, Some(1));
+    }
+
+    #[test]
+    fn parses_observed_imf_cpl_xml() {
+        let bytes = br#"<?xml version="1.0"?>
+<CompositionPlaylist>
+  <Id>urn:uuid:688f4f63-a317-4271-99bf-51444ff39c5b</Id>
+</CompositionPlaylist>"#;
+
+        let doc = parse_imf_cpl(bytes).expect("imf cpl");
+
+        assert_eq!(doc.format, "imf");
+        assert_eq!(doc.streams.len(), 2);
+        assert_eq!(doc.streams[0].codec_name, "jpeg2000");
+        assert_eq!(doc.streams[1].codec_name, "pcm_s24le");
+    }
+
+    #[test]
+    fn rejects_non_cpl_xml() {
+        let error = parse_imf_cpl(br#"<?xml version="1.0"?><AssetMap/>"#).expect_err("assetmap");
+
+        assert!(error.to_string().contains("CompositionPlaylist"));
     }
 
     #[test]

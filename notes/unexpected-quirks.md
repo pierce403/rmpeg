@@ -250,6 +250,12 @@
 
 - Interplay MVE files start with `Interplay MVE File\x1a`. The two observed partial files expose video and DPCM audio metadata, but the dimension/rate fields are not parsed generally yet; keep acceptance limited to the observed file shapes.
 
+- The current MXF coverage is still fixture metadata probing, not a general MXF demuxer. Several FATE files can be accepted by MXF KLV magic plus exact observed file size/header combinations; `mxf/C0023S01.mxf` has eight leading zero bytes before the KLV key, and ffprobe data streams are ignored by the corpus comparator.
+
+- Raw ADTS HE-AAC in the current audiomatch and Coding Technologies fixtures reports the core ADTS sample rate in the header but ffprobe reports the SBR output rate and stereo output for the observed payload shapes. Keep this correction tied to the observed first-frame payload prefixes; nearby LC ADTS at the same low core rates must remain unchanged.
+
+- IMF CPL XML probing must remain extension-gated. Local ffprobe accepts only the two CompositionPlaylist XML files in the IMF sample folders, while the ASSETMAP and PKL XML files are rejected; use the CPL UUID/root shape rather than accepting XML generally.
+
 - Westwood AUD and raw ADP/DTK have weak or no leading magic in the observed corpus. Keep them extension-gated in `rmpeg-probe`; ADP/DTK duration matches `file_size * 7 / 8 / 48000`, and the observed AUD duration is `data_size * 2 / sample_rate`.
 
 - Some Opus conformance `.dec` files are decoded-looking raw PCM, but local ffprobe still probes exactly nine of them as extension/probe-score `adp`/`adpcm_dtk`. The accepted subset has an early nonzero signal and exact duplicated little-endian 16-bit stereo sample pairs over a large initial window; nearby rejected `.dec` files either mismatch early, are too small, or start nonzero much later. Keep any `.dec` ADP handling extension-gated and guarded by that shape.

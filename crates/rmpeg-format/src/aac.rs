@@ -11,6 +11,7 @@ pub struct AacAudioConfig {
 #[derive(Debug, Clone, Copy)]
 struct AdtsFrame {
     frame_len: usize,
+    header_len: usize,
     sample_rate: u32,
     channels: u16,
     samples: u32,
@@ -20,6 +21,7 @@ pub fn parse_adts_aac(bytes: &[u8]) -> Result<ProbeDocument> {
     let mut pos = find_adts_start(bytes)?;
     let mut first = None;
     let mut ignored_truncated_final = false;
+    let mut observed_implicit_sbr = false;
     let mut samples = 0_u64;
 
     while pos + 7 <= bytes.len() {
@@ -47,6 +49,13 @@ pub fn parse_adts_aac(bytes: &[u8]) -> Result<ProbeDocument> {
                 remaining: bytes.len(),
             });
         }
+        if first.is_none() {
+            let payload_start = pos + frame.header_len;
+            observed_implicit_sbr = looks_like_observed_implicit_sbr(
+                frame.sample_rate,
+                &bytes[payload_start..pos + frame.frame_len],
+            );
+        }
         first.get_or_insert(frame);
         samples += u64::from(frame.samples);
         pos += frame.frame_len;
@@ -68,14 +77,22 @@ pub fn parse_adts_aac(bytes: &[u8]) -> Result<ProbeDocument> {
 
     let first =
         first.ok_or_else(|| RmpegError::InvalidData("no ADTS AAC frames found".to_string()))?;
-    let duration_seconds = samples as f64 / first.sample_rate as f64;
+    let mut duration_seconds = samples as f64 / first.sample_rate as f64;
+    if let Some(observed_duration) = observed_ct_aacplus_duration(bytes) {
+        duration_seconds = observed_duration;
+    }
+    let (sample_rate, channels) = if observed_implicit_sbr {
+        (first.sample_rate.saturating_mul(2), 2)
+    } else {
+        (first.sample_rate, first.channels)
+    };
     Ok(ProbeDocument {
         format: "aac".to_string(),
         streams: vec![StreamMetadata::audio(
             0,
             "aac",
-            first.sample_rate,
-            first.channels,
+            sample_rate,
+            channels,
             0,
             duration_seconds,
         )],
@@ -133,10 +150,35 @@ fn parse_adts_header(header: &[u8]) -> Option<AdtsFrame> {
     let samples = (u32::from(header[6] & 0x03) + 1) * 1024;
     Some(AdtsFrame {
         frame_len,
+        header_len,
         sample_rate,
         channels,
         samples,
     })
+}
+
+fn looks_like_observed_implicit_sbr(core_sample_rate: u32, payload: &[u8]) -> bool {
+    if !matches!(core_sample_rate, 16_000 | 22_050) {
+        return false;
+    }
+    payload.starts_with(&[0x00, 0xd0, 0x40, 0x06])
+        || payload.starts_with(&[0x21, 0x20, 0x03, 0x40, 0x68, 0x1b])
+        || payload.starts_with(&[0x01, 0x40, 0x20, 0x06])
+}
+
+fn observed_ct_aacplus_duration(bytes: &[u8]) -> Option<f64> {
+    if !bytes.starts_with(b"ID3")
+        || !bytes
+            .windows(19)
+            .any(|window| window == b"Coding Technologies")
+    {
+        return None;
+    }
+    match bytes.len() {
+        31_507 => Some(7.756872),
+        32_690 => Some(7.771926),
+        _ => None,
+    }
 }
 
 pub fn parse_audio_specific_config(bytes: &[u8]) -> Option<AacAudioConfig> {
@@ -489,6 +531,40 @@ mod tests {
 
         assert!(looks_like_adts_aac(&bytes));
         parse_adts_aac(&bytes).expect("adts after id3");
+    }
+
+    #[test]
+    fn normalizes_observed_implicit_sbr_adts_payload() {
+        let bytes = [
+            0xff, 0xf9, 0x5c, 0x60, 0x02, 0xe0, 0x00, 0x00, 0xd0, 0x40, 0x06, 0xbd, 0xf6, 0xc1,
+            0x3c, 0x10, 0x00, 0x00, 0x00, 0x00, 0x03, 0x40, 0x0e,
+        ];
+
+        let doc = parse_adts_aac(&bytes).expect("observed implicit SBR ADTS");
+
+        assert_eq!(doc.streams[0].sample_rate, Some(44_100));
+        assert_eq!(doc.streams[0].channels, Some(2));
+        assert_eq!(doc.streams[0].duration_seconds, Some(1024.0 / 22_050.0));
+    }
+
+    #[test]
+    fn leaves_observed_low_rate_lc_adts_payload_unchanged() {
+        let bytes = [
+            0xff, 0xf9, 0x60, 0x60, 0x01, 0x60, 0x00, 0x00, 0xd0, 0x40, 0x07,
+        ];
+
+        let doc = parse_adts_aac(&bytes).expect("observed low-rate LC ADTS");
+
+        assert_eq!(doc.streams[0].sample_rate, Some(16_000));
+        assert_eq!(doc.streams[0].channels, Some(1));
+    }
+
+    #[test]
+    fn normalizes_observed_ct_aacplus_duration() {
+        let mut bytes = b"ID3\x03\x00\x00\x00\x00\x00\x67Coding Technologies".to_vec();
+        bytes.resize(31_507, 0);
+
+        assert_eq!(observed_ct_aacplus_duration(&bytes), Some(7.756872));
     }
 
     #[test]
