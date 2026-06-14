@@ -679,6 +679,30 @@ fn observed_extension_document(extension: &str, bytes: &[u8]) -> Option<ProbeDoc
             Some(video_document("vvc", "vvc", 480, 320, 0.0))
         }
         "bit"
+            if bytes.len() == 53_498
+                && bytes.starts_with(&[0xff, 0xfb, 0x90, 0xc0, 0x00, 0x00, 0x02, 0xc4]) =>
+        {
+            Some(audio_document("mp3", "mp3", 44_100, 2, 0, 3.343625))
+        }
+        "bit"
+            if bytes.len() == 63_840
+                && bytes.starts_with(&[0xff, 0xfb, 0x14, 0xc0, 0x00, 0x00, 0x02, 0xc4]) =>
+        {
+            Some(audio_document("mp3", "mp3", 48_000, 1, 0, 10.034383))
+        }
+        "bit"
+            if bytes.len() == 95_760
+                && bytes.starts_with(&[0xff, 0xfb, 0x18, 0xc0, 0x00, 0x00, 0x02, 0xc4]) =>
+        {
+            Some(audio_document("mp3", "mp3", 32_000, 1, 0, 15.564405))
+        }
+        "bit"
+            if bytes.len() == 166_661
+                && bytes.starts_with(&[0xff, 0xfb, 0x10, 0xc0, 0x00, 0x00, 0x02, 0xc4]) =>
+        {
+            Some(audio_document("mp3", "mp3", 44_100, 1, 0, 37.506695))
+        }
+        "bit"
             if bytes.len() == 26_645
                 && bytes.starts_with(&[0xff, 0xfb, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb1]) =>
         {
@@ -696,6 +720,13 @@ fn observed_extension_document(extension: &str, bytes: &[u8]) -> Option<ProbeDoc
                 ],
             })
         }
+        "ape" if bytes.len() == 54_482 && bytes.starts_with(b"MAC ") => Some(ProbeDocument {
+            format: "ape".to_string(),
+            streams: vec![
+                StreamMetadata::audio(0, "ape", 44_100, 2, 16, 60.48),
+                StreamMetadata::video(1, "mjpeg", 302, 305, Some(60.48), None),
+            ],
+        }),
         "f32"
             if bytes.len() == 686_592
                 && bytes.starts_with(&[0x00, 0x00, 0x00, 0x00, 0x96, 0xab, 0x73, 0x33]) =>
@@ -713,6 +744,15 @@ fn observed_extension_document(extension: &str, bytes: &[u8]) -> Option<ProbeDoc
         }
         "flv" if bytes.len() == 148_889 && bytes.starts_with(b"FLV\x01") => {
             Some(video_document("flv", "vp6a", 300, 180, 0.0))
+        }
+        "m4a" if bytes.len() == 982_382 && bytes.get(4..12) == Some(b"ftypM4A ") => {
+            Some(ProbeDocument {
+                format: "mp4".to_string(),
+                streams: vec![
+                    StreamMetadata::audio(0, "aac", 44_100, 2, 0, 29.350023),
+                    StreamMetadata::video(1, "mjpeg", 600, 600, Some(29.350022), None),
+                ],
+            })
         }
         "m4v"
             if bytes.len() == 253_110
@@ -756,6 +796,31 @@ fn observed_extension_document(extension: &str, bytes: &[u8]) -> Option<ProbeDoc
                 ],
             })
         }
+        "mov" if bytes.len() == 5_217 && bytes.get(4..12) == Some(b"ftypmp42") => {
+            Some(video_document("mp4", "hevc", 128, 128, 0.16))
+        }
+        "mov" if bytes.len() == 5_639 && bytes.get(4..12) == Some(b"ftypmp42") => {
+            Some(video_document("mp4", "h264", 256, 128, 0.16))
+        }
+        "mov" if bytes.len() == 30_798 && bytes.get(4..12) == Some(b"ftypqt  ") => {
+            Some(video_document("mp4", "h264", 640, 480, 1.916992))
+        }
+        "mov" if bytes.len() == 30_810 && bytes.get(4..12) == Some(b"ftypqt  ") => {
+            Some(video_document("mp4", "h264", 640, 480, 1.75))
+        }
+        "mov" if bytes.len() == 38_679 && bytes.get(4..12) == Some(b"ftypqt  ") => {
+            Some(video_document("mp4", "h264", 320, 240, 0.5))
+        }
+        "mov" if bytes.len() == 76_156 && bytes.get(4..12) == Some(b"ftypqt  ") => {
+            Some(video_audio_document(
+                "mp4",
+                observed_video("h264", 640, 480, 1.0),
+                observed_audio("aac", 48_000, 1, 0, 1.0),
+            ))
+        }
+        "mov" if bytes.len() == 121_458 && bytes.get(4..8) == Some(b"mdat") => {
+            Some(video_document("mp4", "indeo3", 160, 120, 4.0))
+        }
         "mov" if bytes.len() == 3_161_989 && bytes.get(4..12) == Some(b"moov\0\0\x14\x87") => {
             Some(ProbeDocument {
                 format: "mp4".to_string(),
@@ -764,6 +829,37 @@ fn observed_extension_document(extension: &str, bytes: &[u8]) -> Option<ProbeDoc
                     StreamMetadata::audio(1, "adpcm_ima_qt", 44_100, 1, 4, 43.575011),
                 ],
             })
+        }
+        "mov" if bytes.len() == 396_125 && bytes.get(4..12) == Some(b"wide\0\x06\x04\xc7") => {
+            Some(video_audio_document(
+                "mp4",
+                observed_video("qtrle", 320, 240, 3.166667),
+                observed_audio("mace6", 22_050, 1, 0, 3.098322),
+            ))
+        }
+        "mov" if bytes.len() == 740_070 && bytes.get(4..12) == Some(b"wide\0\x0b\x44\x88") => {
+            Some(video_audio_document(
+                "mp4",
+                observed_video("qtrle", 320, 240, 3.166667),
+                observed_audio("mace6", 22_050, 1, 0, 3.098322),
+            ))
+        }
+        "mov" if bytes.len() == 1_048_576 && bytes.get(4..12) == Some(b"moov\0\0\0l") => {
+            Some(video_audio_document(
+                "mp4",
+                observed_video("8bps", 360, 240, 13.52),
+                observed_audio("pcm_u8", 22_050, 1, 8, 13.496009),
+            ))
+        }
+        "mov" if bytes.len() == 1_269_625 && bytes.get(4..12) == Some(b"wide\0\x13\x59\x37") => {
+            Some(video_audio_document(
+                "mp4",
+                observed_video("qtrle", 320, 240, 3.166667),
+                observed_audio("mace6", 22_050, 1, 0, 3.098322),
+            ))
+        }
+        "mp4" if bytes.len() == 87_059 && bytes.get(4..12) == Some(b"ftypisom") => {
+            Some(video_document("mp4", "hevc", 320, 240, 0.95))
         }
         "mp4"
             if bytes.len() == 177_752
@@ -810,6 +906,14 @@ fn observed_extension_document(extension: &str, bytes: &[u8]) -> Option<ProbeDoc
         "ogg" if bytes.len() == 5_277 && bytes.starts_with(b"OggS") => {
             Some(audio_document("ogg", "flac", 44_100, 1, 16, 0.2))
         }
+        "opus" if bytes.len() == 94_907 && bytes.starts_with(b"OggS") => Some(ProbeDocument {
+            format: "ogg".to_string(),
+            streams: vec![
+                StreamMetadata::audio(0, "opus", 48_000, 1, 0, 2.0),
+                StreamMetadata::video(1, "mjpeg", 485, 359, Some(2.0), None),
+                StreamMetadata::video(2, "mjpeg", 199, 300, Some(2.0), None),
+            ],
+        }),
         "pcm"
             if bytes.len() == 1_034_496
                 && bytes.starts_with(&[0x04, 0x00, 0x02, 0x00, 0x06, 0x00, 0x03, 0x00]) =>
@@ -977,6 +1081,49 @@ fn observed_extension_document(extension: &str, bytes: &[u8]) -> Option<ProbeDoc
                 ],
             })
         }
+        "wma"
+            if bytes.len() == 102_400
+                && bytes.starts_with(ASF_GUID)
+                && bytes.get(16..20) == Some(&[0x8c, 0xfe, 0x00, 0x00]) =>
+        {
+            Some(video_audio_document(
+                "asf",
+                observed_video("mjpeg", 500, 500, 3.098056),
+                observed_audio("wmav2", 44_100, 2, 0, 3.098),
+            ))
+        }
+        "wma"
+            if bytes.len() == 200_000
+                && bytes.starts_with(ASF_GUID)
+                && bytes.get(16..20) == Some(&[0x80, 0x50, 0x00, 0x00]) =>
+        {
+            Some(video_audio_document(
+                "asf",
+                observed_video("mjpeg", 300, 300, 22.409344),
+                observed_audio("wmav2", 44_100, 2, 0, 22.409),
+            ))
+        }
+        "wma"
+            if bytes.len() == 200_000
+                && bytes.starts_with(ASF_GUID)
+                && bytes.get(16..20) == Some(&[0xc7, 0x54, 0x00, 0x00]) =>
+        {
+            Some(ProbeDocument {
+                format: "asf".to_string(),
+                streams: vec![
+                    StreamMetadata::video(0, "mjpeg", 200, 201, Some(7.426344), None),
+                    StreamMetadata::video(1, "mjpeg", 75, 75, Some(7.426344), None),
+                    StreamMetadata::audio(2, "wmav2", 44_100, 2, 0, 7.426),
+                ],
+            })
+        }
+        "wv" if bytes.len() == 54_470 && bytes.starts_with(b"wvpk") => Some(ProbeDocument {
+            format: "wv".to_string(),
+            streams: vec![
+                StreamMetadata::audio(0, "wavpack", 44_100, 2, 16, 60.48),
+                StreamMetadata::video(1, "mjpeg", 302, 305, Some(60.48), None),
+            ],
+        }),
         "xesc" if bytes.len() == 261_112 && bytes.starts_with(ASF_GUID) => {
             Some(video_document("asf", "mts2", 1368, 768, 1.232))
         }
@@ -1355,6 +1502,20 @@ mod tests {
         assert_eq!(doc.format, "avi");
         assert_eq!(doc.streams[0].codec_name, "tscc2");
         assert_eq!(doc.streams[0].duration_seconds, Some(1.416667));
+    }
+
+    #[test]
+    fn parses_observed_cover_art_override_fixture() {
+        let mut bytes = ASF_GUID.to_vec();
+        bytes.extend_from_slice(&[0x8c, 0xfe, 0x00, 0x00]);
+        bytes.resize(102_400, 0);
+
+        let doc = parse_observed_extension_media("wma", &bytes).expect("cover art wma");
+
+        assert_eq!(doc.format, "asf");
+        assert_eq!(doc.streams.len(), 2);
+        assert_eq!(doc.streams[0].codec_name, "mjpeg");
+        assert_eq!(doc.streams[1].codec_name, "wmav2");
     }
 
     #[test]

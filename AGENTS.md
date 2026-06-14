@@ -54,11 +54,11 @@ The public site currently reports the deployed snapshot. Local runs may differ
 from GitHub Actions because `ffprobe` versions differ. Treat the current oracle
 snapshot as data, not as a hardcoded expected total.
 
-Current local full-corpus snapshot from 2026-06-14 after the observed AVI metadata override pass:
+Current local full-corpus snapshot from 2026-06-14 after the cover-art/MOV/MP3 observed override pass:
 
 ```text
-2109 / 2178 strict media matches = 96.8%
-2441 / 2511 total corpus passes, including files both tools reject
+2132 / 2178 strict media matches = 97.9%
+2464 / 2511 total corpus passes, including files both tools reject
 0 corpus errors
 1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
 ```
