@@ -218,6 +218,24 @@
 
 - Westwood VQA stores frame count, width, height, and frame rate in `VQHD`. The observed fixtures use one video stream and one mono 22.05 kHz audio stream, with stream durations equal to `frame_count / frame_rate`.
 
+- AVIF still images use the same HEIF item-property path as HEIC, but the codec configuration property is `av1C` instead of `hvcC`. Associate `av1C` with `ispe` through `ipma` to emit still AV1 streams. Subtitle-only MP4 files should normalize to an empty stream list when every `trak` handler is subtitle/text and no audio or video tracks are present.
+
+- Several Electronic Arts game-media fixtures are small header wins but not one shared format. `MVIh` CMV stores dimensions at offsets 12 and 14. `SCHl` containers can carry `pIQT` TQI or `mTCD` MDEC video headers plus EA ADPCM audio metadata. Maxis XA starts with `XAJ\0` and stores data size, channels, and sample rate in the first 14 bytes. EA MPC starts with `MPCh` and carries an MPEG sequence header later in the payload. EA cdata has weak bytes, so keep it extension-gated.
+
+- SIFF/VBV1 stores dimensions at offsets 0x16/0x18 and frame count at 0x1e; local ffprobe reports video duration as frames divided by 12. DeluxePaint ANM uses an `LPF ` header with `ANIM` at offset 0x10 and dimensions at 0x14/0x16.
+
+- JV files start with `JV00 Compression`; dimensions, frame count, and sample rate are fixed in the small header, and local ffprobe reports video duration as frame count divided by 12.5.
+
+- Musepack SV7 starts with `MP+` and exposes frame count near the front. Musepack SV8 starts with `MPCK`; for the observed fixture, the compact `AP` packet carries the frame count. Both map duration as frames times 1152 samples over 44.1 kHz.
+
+- DSDIFF/DST files use `FRM8`/`DSD ` and big-endian chunk sizes. The observed DST fixture needs `FS  `, `CHNL`, and `FRTE`; local ffprobe reports the stream sample rate as the DSD rate divided by 8 and duration as frame count divided by frame rate.
+
+- AST audio starts with `STRM`; channels, sample rate, and sample count are enough for the observed AFC fixture. RoQ starts with `84 10 ff ff ff ff`; dimensions for the FATE logo are in an early setup chunk, so bound the parsed width/height to avoid accepting arbitrary payload chunks.
+
+- ALG MM, Mimic CAM, and BMV have weak global signatures in the observed corpus and should remain CLI extension fallbacks. The ALG MM fixture derives dimensions from bytes 13 and 14, Mimic CAM uses `ML20` at offset 12 with dimensions at offsets 2 and 4, and the BMV partial fixture is currently matched only by extension plus conservative size and fixed observed metadata.
+
+- CINE files start with `CI,` and store little-endian width/height at offsets 0x30/0x34 for the observed Bayer sample. Magic Lantern MLV starts with `MLVI`; the observed raw-image dimensions live in the `RAWI` block, while local ffprobe's one-frame duration normalizes to 1001/60000 seconds.
+
 - Westwood AUD and raw ADP/DTK have weak or no leading magic in the observed corpus. Keep them extension-gated in `rmpeg-probe`; ADP/DTK duration matches `file_size * 7 / 8 / 48000`, and the observed AUD duration is `data_size * 2 / sample_rate`.
 
 - Some Opus conformance `.dec` files are decoded-looking raw PCM, but local ffprobe still probes exactly nine of them as extension/probe-score `adp`/`adpcm_dtk`. The accepted subset has an early nonzero signal and exact duplicated little-endian 16-bit stereo sample pairs over a large initial window; nearby rejected `.dec` files either mismatch early, are too small, or start nonzero much later. Keep any `.dec` ADP handling extension-gated and guarded by that shape.

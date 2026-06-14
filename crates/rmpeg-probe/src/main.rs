@@ -2,10 +2,11 @@ use std::{env, fs, process};
 
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 use rmpeg_format::{
-    parse_act, parse_aea, parse_alias_pix, parse_bintext, parse_cdg, parse_cdxl, parse_jxl,
-    parse_pgs_sup, parse_pict, parse_pp_bnk, parse_raw_ac3_or_eac3_scanning, parse_raw_adp_dtk,
-    parse_raw_adp_dtk_dec, parse_raw_adp_dtk_pcm, parse_raw_g722, parse_raw_g723_1, parse_raw_g728,
-    parse_txd, parse_vc1_rcv, parse_vmd, parse_vobsub_mpeg, parse_westwood_aud, parse_xface, probe,
+    parse_act, parse_aea, parse_alg_mm, parse_alias_pix, parse_bintext, parse_bmv, parse_cdg,
+    parse_cdxl, parse_ea_cdata, parse_jxl, parse_mimic_cam, parse_pgs_sup, parse_pict,
+    parse_pp_bnk, parse_raw_ac3_or_eac3_scanning, parse_raw_adp_dtk, parse_raw_adp_dtk_dec,
+    parse_raw_adp_dtk_pcm, parse_raw_g722, parse_raw_g723_1, parse_raw_g728, parse_txd,
+    parse_vc1_rcv, parse_vmd, parse_vobsub_mpeg, parse_westwood_aud, parse_xface, probe,
 };
 
 fn main() {
@@ -58,7 +59,11 @@ fn probe_raw_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
         "bin" => parse_bintext(input),
         "cdg" => parse_cdg(input),
         "cdxl" => parse_cdxl(input),
+        "cdata" => parse_ea_cdata(input),
+        "bmv" => parse_bmv(input),
+        "cam" => parse_mimic_cam(input),
         "jxl" => parse_jxl(input),
+        "mm" => parse_alg_mm(input),
         "sup" => parse_pgs_sup(input),
         "sub" => parse_vobsub_mpeg(input),
         "pct" | "pict" => parse_pict(input),

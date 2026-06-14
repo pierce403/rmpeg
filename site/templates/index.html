@@ -340,7 +340,7 @@
       {{phase_progress}}
 
       <h2>Current Status</h2>
-      <p>rmpeg is not FFmpeg-compatible yet. The MVP has WAV decode/hash plus probe-level MP3, FLAC, Ogg/Opus, Ogg/Vorbis, MP4/H.264/AAC, raw Annex B H.264, IVF/VP8/VP9/AV1, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000 codestream, and binary PNM image metadata.</p>
+      <p>rmpeg is not FFmpeg-compatible yet. The MVP has WAV decode/hash plus broadening probe-level metadata across common audio, video, image, subtitle, game-media, and container formats. Recent coverage includes MOV/MP4, MPEG-TS, Matroska/WebM, AVI, Electronic Arts game media, HEIF/HEIC/AVIF, and many standalone image formats.</p>
       {{current_status}}
 
       <h2>Correctness</h2>
@@ -354,7 +354,7 @@
       {{benchmarks}}
 
       <h2>Supported Formats</h2>
-      <p>Implemented: RIFF/WAVE with PCM signed 16-bit little-endian audio and PCM unsigned 8-bit audio, mono or stereo; MP3 frame-header metadata; FLAC STREAMINFO metadata; Ogg/Opus and Ogg/Vorbis header metadata; MP4/MOV track metadata for H.264 video and AAC audio; raw Annex B H.264 SPS metadata; IVF metadata for VP8, VP9, and AV1 video; DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, and JPEG 2000 codestream image metadata; binary PBM, PGM, and PPM image metadata.</p>
+      <p>Implemented: RIFF/WAVE PCM decode/hash for the narrow MVP, plus probe-level metadata for many observed FATE fixtures including MP3, FLAC, Ogg, MP4/MOV, Matroska/WebM, AVI, MPEG-TS, raw H.264/HEVC/VVC/MPEG video, FLV, RealMedia, ASF/WMA, Electronic Arts game media, Bink, Smacker, RoQ, Musepack, DSDIFF/DST, HEIF/HEIC/AVIF, subtitles, and many standalone image formats.</p>
       <p>Not implemented: MP3 decode, FLAC decode, Opus decode, Vorbis decode, AAC decode, H.264 decode, VP8 decode, VP9 decode, AV1 decode, DDS/PNG/APNG/BMP/SGI/PSD/JPEG/WebP/Sun Raster/OpenEXR/JPEG 2000 decode, image decode, filters, seeking, resampling, remuxing, and most codec/container behavior.</p>
 
       <h2>Known Failures</h2>

@@ -19,10 +19,10 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - Ogg/Opus, Ogg/Vorbis, Ogg/Theora, and Ogg/VP8 header metadata probing, including truncated final-page duration handling
 - FLV H.264/AAC sequence-header metadata probing
 - MP4/MOV track metadata probing for H.264/HEVC/MPEG-4 video, AAC/AMR/Vorbis/QuickTime PCM audio, and common QuickTime video sample entries
-- fragmented MP4/MOV duration probing from `moof`/`traf` timing and HEIF/HEIC still-image metadata from item properties
+- fragmented MP4/MOV duration probing from `moof`/`traf` timing, subtitle-only MP4 normalization, and HEIF/HEIC/AVIF still-image metadata from item properties
 - CAF audio metadata probing for observed AAC, Opus, and PCM fixtures
 - MPEG-TS program metadata probing for observed MPEG-2 video, H.264, HEVC, VVC, MPEG audio, AAC LATM, AC-3, and Opus fixtures
-- EA VP6 metadata probing for observed Electronic Arts VP6 files
+- EA VP6, CMV, TQI, MDEC, MPC, Maxis XA, and EA cdata metadata probing for observed Electronic Arts fixtures
 - raw DNxHD/DNxHR frame metadata probing
 - narrow MXF metadata probing for DNXUC FATE fixtures
 - ASF/WMA Lossless, WMAPro, WMA Voice, MSS2, and G2M metadata probing from ASF header objects
@@ -79,8 +79,9 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - additional QuickTime/MOV sample-entry metadata mappings for observed Sorenson, Cinepak, DV, GSM, Media 100, M-JPEG-B, Pixlet, RPZA, SMC, VP6 alpha, and v410 fixtures
 - FLV Nellymoser audio metadata probing from observed ordinary audio tags
 - APV, AMV, BFI, Id CIN, PSX STR, SGI Movie, Sierra SOL, Smacker, ANSI/TTY text, and subtitle-only PGS/VobSub metadata probing for observed FATE fixtures
+- SIFF, ANM, JV, Musepack, DSDIFF/DST, AST, RoQ, ALG MM, Mimic, BMV, CINE, and MLV metadata probing for observed FATE fixtures
 
-Compressed decode is not implemented yet. MP3, AC-3, E-AC-3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, CAF, QCP, NIST Sphere, W64, XWMA, raw ADP/DTK, ACT, G.728, KVAG, QOA, WavPack, WMA Lossless, WMAPro, WMA Voice, ATRAC1, ATRAC3, ALP/APM ADPCM, RealAudio/RealVideo, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, Westwood AUD, G.722, G.723.1, PP_BNK, CDXL, VOC, compressed WAV tags, SMJPEG, Bethesda VID, VMD, BFSTM/BRSTM, RSD, H.264, HEVC, VVC, VC-1, raw MPEG-4 Visual, raw MPEG video, DNxHD/DNxHR, DNXUC, G2M, Hap, ProRes, QuickTime Animation, DV, VP6 alpha, Sorenson, Cinepak, GSM-in-MOV, Media 100, M-JPEG-B, Pixlet, RPZA, SMC, VP8, VP9, AV1, FLV, FLV Nellymoser, Matroska/WebM, MPEG-TS, EA VP6, EA MAD/TGV/TGQ, CDG, DXA, GDV, RPL, Westwood VQA, APV, AMV, BFI, Id CIN, PSX STR, SGI Movie, Sierra SOL, Smacker, HEIF/HEIC, subtitles, DDS, GIF, DPX, FLIC, TXD, FITS, IFF, JPEG XL, PNG/APNG, BMP, BRender PIX, Alias PIX, Pictor, QuickDraw PICT, PTX, XBM, X-Face, ANSI/TTY text, binary text, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, AC-3, E-AC-3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, CAF, QCP, NIST Sphere, W64, XWMA, raw ADP/DTK, ACT, G.728, KVAG, QOA, WavPack, WMA Lossless, WMAPro, WMA Voice, ATRAC1, ATRAC3, ALP/APM ADPCM, RealAudio/RealVideo, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, Westwood AUD, G.722, G.723.1, PP_BNK, CDXL, VOC, compressed WAV tags, SMJPEG, Bethesda VID, VMD, BFSTM/BRSTM, RSD, H.264, HEVC, VVC, VC-1, raw MPEG-4 Visual, raw MPEG video, DNxHD/DNxHR, DNXUC, G2M, Hap, ProRes, QuickTime Animation, DV, VP6 alpha, Sorenson, Cinepak, GSM-in-MOV, Media 100, M-JPEG-B, Pixlet, RPZA, SMC, VP8, VP9, AV1, FLV, FLV Nellymoser, Matroska/WebM, MPEG-TS, EA VP6, EA MAD/TGV/TGQ, EA CMV/TQI/MDEC/MPC/Maxis XA/cdata, CDG, DXA, GDV, RPL, Westwood VQA, APV, AMV, BFI, Id CIN, PSX STR, SGI Movie, Sierra SOL, Smacker, SIFF, ANM, JV, Musepack, DSDIFF/DST, AST, RoQ, ALG MM, Mimic, BMV, CINE, MLV, HEIF/HEIC/AVIF, subtitles, DDS, GIF, DPX, FLIC, TXD, FITS, IFF, JPEG XL, PNG/APNG, BMP, BRender PIX, Alias PIX, Pictor, QuickDraw PICT, PTX, XBM, X-Face, ANSI/TTY text, binary text, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
@@ -88,7 +89,7 @@ FFmpeg is used as the behavior oracle. This project does not copy or mechanicall
 
 Phase 1 is compatibility: make rmpeg successfully inspect and eventually decode as much of the upstream FFmpeg sample media set as possible, with the site reporting real progress from `site/data/upstream-samples.json`.
 
-Current Phase 1 strict corpus progress is 1926 of 2178 FFmpeg-accepted samples, or 88.430%, on the local upstream sample report.
+Current Phase 1 strict corpus progress is 1948 of 2178 FFmpeg-accepted samples, or 89.440%, on the local upstream sample report.
 
 Phase 2 is optimization. Once Phase 1 is no longer the main blocker, the site should show which older FFmpeg codec paths rmpeg is faster than, using the benchmark JSON instead of hand-written claims.
 

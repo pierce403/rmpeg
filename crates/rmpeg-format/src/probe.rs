@@ -6,10 +6,12 @@ use crate::{
     alp::{looks_like_alp, parse_alp},
     amr::parse_amr_nb,
     amv::{looks_like_amv, parse_amv},
+    anm::{looks_like_anm, parse_anm},
     ape::parse_ape,
     apm::{looks_like_apm, parse_apm},
     apv::{looks_like_apv, parse_apv},
     asf::{looks_like_asf, parse_asf},
+    ast::{looks_like_ast, parse_ast},
     avi::{looks_like_avi, parse_avi},
     bethsoftvid::{looks_like_bethsoftvid, parse_bethsoftvid},
     bfi::{looks_like_bfi, parse_bfi},
@@ -18,10 +20,12 @@ use crate::{
     bmp::{looks_like_bmp, parse_bmp},
     brender_pix::{looks_like_brender_pix, parse_brender_pix},
     caf::{looks_like_caf, parse_caf},
+    cine::{looks_like_cine, parse_cine},
     dds::parse_dds,
     dfa::{looks_like_dfa, parse_dfa},
     dnxhd::{looks_like_raw_dnxhd, parse_raw_dnxhd},
     dpx::{looks_like_dpx, parse_dpx},
+    dsdiff::{looks_like_dsdiff, parse_dsdiff},
     dts::{looks_like_raw_dts, parse_dtshd, parse_mpegts_dts, parse_raw_dts},
     dxa::{looks_like_dxa, parse_dxa},
     ea::{looks_like_ea, parse_ea},
@@ -39,15 +43,18 @@ use crate::{
     ivf::parse_ivf,
     jpeg::{looks_like_jpeg, parse_jpeg},
     jpeg2000::{looks_like_jpeg2000_codestream, parse_jpeg2000_codestream},
+    jv::{looks_like_jv, parse_jv},
     jxl::{looks_like_jxl, parse_jxl},
     kvag::{looks_like_kvag, parse_kvag},
     matroska::{looks_like_matroska, parse_matroska},
     mlp::{looks_like_mlp_or_truehd, parse_mlp_or_truehd},
+    mlv::{looks_like_mlv, parse_mlv},
     mp3::parse_mp3,
     mp4::{looks_like_mp4, parse_mp4},
     mpeg4::{looks_like_mpeg4_visual, parse_mpeg4_visual},
     mpegts::{looks_like_mpegts, parse_mpegts},
     mpegvideo::{looks_like_mpeg_video, parse_mpeg_video},
+    musepack::{looks_like_musepack, parse_musepack},
     mxf::{looks_like_mxf, parse_mxf},
     nistsphere::{looks_like_nistsphere, parse_nistsphere},
     ogg::parse_ogg,
@@ -61,10 +68,12 @@ use crate::{
     qcp::{looks_like_qcp, parse_qcp},
     qoa::{looks_like_qoa, parse_qoa},
     realmedia::{looks_like_realmedia, parse_realmedia},
+    roq::{looks_like_roq, parse_roq},
     rpl::{looks_like_rpl, parse_rpl},
     rsd::{looks_like_rsd, parse_rsd},
     sgi::{looks_like_sgi, parse_sgi},
     sgi_mv::{looks_like_sgi_mv, parse_sgi_mv},
+    siff::{looks_like_siff, parse_siff},
     smacker::{looks_like_smacker, parse_smacker},
     smjpeg::{looks_like_smjpeg, parse_smjpeg},
     sol::{looks_like_sol, parse_sol},
@@ -127,6 +136,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_vqa(bytes);
     }
 
+    if looks_like_dsdiff(bytes) {
+        return parse_dsdiff(bytes);
+    }
+
     if looks_like_iff(bytes) {
         return parse_iff(bytes);
     }
@@ -151,12 +164,36 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_ea(bytes);
     }
 
+    if looks_like_siff(bytes) {
+        return parse_siff(bytes);
+    }
+
     if looks_like_dxa(bytes) {
         return parse_dxa(bytes);
     }
 
     if looks_like_gdv(bytes) {
         return parse_gdv(bytes);
+    }
+
+    if looks_like_roq(bytes) {
+        return parse_roq(bytes);
+    }
+
+    if looks_like_jv(bytes) {
+        return parse_jv(bytes);
+    }
+
+    if looks_like_cine(bytes) {
+        return parse_cine(bytes);
+    }
+
+    if looks_like_mlv(bytes) {
+        return parse_mlv(bytes);
+    }
+
+    if looks_like_anm(bytes) {
+        return parse_anm(bytes);
     }
 
     if looks_like_kvag(bytes) {
@@ -201,6 +238,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"MAC ") {
         return parse_ape(bytes);
+    }
+
+    if looks_like_musepack(bytes) {
+        return parse_musepack(bytes);
+    }
+
+    if looks_like_ast(bytes) {
+        return parse_ast(bytes);
     }
 
     if bytes.starts_with(b"TTA1") {

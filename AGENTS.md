@@ -54,11 +54,11 @@ The public site currently reports the deployed snapshot. Local runs may differ
 from GitHub Actions because `ffprobe` versions differ. Treat the current oracle
 snapshot as data, not as a hardcoded expected total.
 
-Current local full-corpus snapshot from 2026-06-14 after narrow APV/AMV/BFI/Id CIN/PSX STR/SGI Movie/Smacker/SOL/EA TGV/TGQ/ANSI/subtitle-only metadata probing:
+Current local full-corpus snapshot from 2026-06-14 after narrow AVIF/subtitle-only MP4/EA game-media/SIFF/ANM/JV/Musepack/DSDIFF/AST/RoQ/CINE/MLV metadata probing:
 
 ```text
-1926 / 2178 strict media matches = 88.4%
-2258 / 2511 total corpus passes, including files both tools reject
+1948 / 2178 strict media matches = 89.4%
+2280 / 2511 total corpus passes, including files both tools reject
 0 corpus errors
 1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
 ```

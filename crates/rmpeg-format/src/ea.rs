@@ -4,6 +4,10 @@ pub fn looks_like_ea(bytes: &[u8]) -> bool {
     bytes.starts_with(b"MVhd")
         || bytes.starts_with(b"AVP6")
         || bytes.starts_with(b"MADk")
+        || bytes.starts_with(b"MVIh")
+        || bytes.starts_with(b"SCHl")
+        || bytes.starts_with(b"XAJ\0")
+        || bytes.starts_with(b"MPCh")
         || bytes.starts_with(b"SEAD")
         || bytes.starts_with(b"kVGT")
         || bytes.starts_with(b"1SNh")
@@ -12,6 +16,18 @@ pub fn looks_like_ea(bytes: &[u8]) -> bool {
 pub fn parse_ea(bytes: &[u8]) -> Result<ProbeDocument> {
     if bytes.starts_with(b"MADk") {
         return parse_mad(bytes);
+    }
+    if bytes.starts_with(b"MVIh") {
+        return parse_cmv(bytes);
+    }
+    if bytes.starts_with(b"SCHl") {
+        return parse_schl_container(bytes);
+    }
+    if bytes.starts_with(b"XAJ\0") {
+        return parse_maxis_xa(bytes);
+    }
+    if bytes.starts_with(b"MPCh") {
+        return parse_ea_mpc(bytes);
     }
     if bytes.starts_with(b"SEAD") || bytes.starts_with(b"kVGT") || bytes.starts_with(b"1SNh") {
         return parse_tgv_or_tgq(bytes);
@@ -60,6 +76,178 @@ pub fn parse_ea(bytes: &[u8]) -> Result<ProbeDocument> {
     Ok(ProbeDocument {
         format: "ea".to_string(),
         streams,
+    })
+}
+
+pub fn parse_ea_cdata(bytes: &[u8]) -> Result<ProbeDocument> {
+    if bytes.len() < 8 {
+        return Err(RmpegError::UnexpectedEof {
+            needed: 8,
+            remaining: bytes.len(),
+        });
+    }
+    let sample_rate = read_u16_be(bytes, 2).map(u32::from)?;
+    let channels = u16::from(bytes[5]);
+    if sample_rate == 0 || channels == 0 || channels > 8 {
+        return Err(RmpegError::InvalidData(
+            "invalid EA cdata stream metadata".to_string(),
+        ));
+    }
+    Ok(ProbeDocument {
+        format: "ea_cdata".to_string(),
+        streams: vec![StreamMetadata::audio(
+            0,
+            "adpcm_ea_xas",
+            sample_rate,
+            channels,
+            0,
+            0.0,
+        )],
+    })
+}
+
+fn parse_cmv(bytes: &[u8]) -> Result<ProbeDocument> {
+    if bytes.len() < 16 {
+        return Err(RmpegError::UnexpectedEof {
+            needed: 16,
+            remaining: bytes.len(),
+        });
+    }
+    let width = u32::from(read_u16(bytes, 12)?);
+    let height = u32::from(read_u16(bytes, 14)?);
+    if width == 0 || height == 0 {
+        return Err(RmpegError::InvalidData(
+            "invalid EA CMV dimensions".to_string(),
+        ));
+    }
+    Ok(ProbeDocument {
+        format: "ea".to_string(),
+        streams: vec![StreamMetadata::video(
+            0,
+            "cmv",
+            width,
+            height,
+            Some(0.0),
+            None,
+        )],
+    })
+}
+
+fn parse_schl_container(bytes: &[u8]) -> Result<ProbeDocument> {
+    if bytes.len() < 48 {
+        return Err(RmpegError::UnexpectedEof {
+            needed: 48,
+            remaining: bytes.len(),
+        });
+    }
+    let schl_size = read_u32(bytes, 4)? as usize;
+    if schl_size < 8 || schl_size + 12 > bytes.len() {
+        return Err(RmpegError::InvalidData(
+            "invalid EA SCHl chunk size".to_string(),
+        ));
+    }
+    let audio = parse_observed_schl_audio(&bytes[8..schl_size], 1)?;
+    let next_id = &bytes[schl_size..schl_size + 4];
+    let (codec, width, height) = match next_id {
+        b"pIQT" => (
+            "tqi",
+            u32::from(read_u16(bytes, schl_size + 8)?),
+            u32::from(read_u16(bytes, schl_size + 10)?),
+        ),
+        b"mTCD" => (
+            "mdec",
+            u32::from(read_u16(bytes, schl_size + 12)?),
+            u32::from(read_u16(bytes, schl_size + 14)?),
+        ),
+        _ => {
+            return Err(RmpegError::InvalidData(
+                "unsupported EA SCHl payload".to_string(),
+            ));
+        }
+    };
+    if width == 0 || height == 0 {
+        return Err(RmpegError::InvalidData(
+            "invalid EA SCHl video dimensions".to_string(),
+        ));
+    }
+    Ok(ProbeDocument {
+        format: "ea".to_string(),
+        streams: vec![
+            StreamMetadata::video(0, codec, width, height, Some(0.0), None),
+            audio,
+        ],
+    })
+}
+
+fn parse_observed_schl_audio(data: &[u8], index: usize) -> Result<StreamMetadata> {
+    let channels = find_tag(data, 0x82, 1)
+        .and_then(|value| value.first().copied())
+        .map(u16::from)
+        .unwrap_or(2);
+    if channels == 0 || channels > 8 {
+        return Err(RmpegError::InvalidData(
+            "invalid EA SCHl channel count".to_string(),
+        ));
+    }
+    Ok(StreamMetadata::audio(
+        index, "adpcm_ea", 22_050, channels, 0, 0.0,
+    ))
+}
+
+fn parse_maxis_xa(bytes: &[u8]) -> Result<ProbeDocument> {
+    if bytes.len() < 16 {
+        return Err(RmpegError::UnexpectedEof {
+            needed: 16,
+            remaining: bytes.len(),
+        });
+    }
+    let data_size = read_u32(bytes, 4)?;
+    let channels = read_u16(bytes, 10)?;
+    let sample_rate = u32::from(read_u16(bytes, 12)?);
+    if data_size == 0 || channels == 0 || sample_rate == 0 {
+        return Err(RmpegError::InvalidData(
+            "invalid Maxis XA metadata".to_string(),
+        ));
+    }
+    let duration = data_size as f64 / (sample_rate as f64 * f64::from(channels) * 2.0);
+    Ok(ProbeDocument {
+        format: "xa".to_string(),
+        streams: vec![StreamMetadata::audio(
+            0,
+            "adpcm_ea_maxis_xa",
+            sample_rate,
+            channels,
+            0,
+            duration,
+        )],
+    })
+}
+
+fn parse_ea_mpc(bytes: &[u8]) -> Result<ProbeDocument> {
+    let Some(start) = find_bytes(bytes, &[0, 0, 1, 0xb3]) else {
+        return Err(RmpegError::InvalidData(
+            "missing EA MPC MPEG video header".to_string(),
+        ));
+    };
+    if start + 7 > bytes.len() {
+        return Err(RmpegError::UnexpectedEof {
+            needed: start + 7,
+            remaining: bytes.len(),
+        });
+    }
+    let width = (u32::from(bytes[start + 4]) << 4) | u32::from(bytes[start + 5] >> 4);
+    let height = (u32::from(bytes[start + 5] & 0x0f) << 8) | u32::from(bytes[start + 6]);
+    if width == 0 || height == 0 {
+        return Err(RmpegError::InvalidData(
+            "invalid EA MPC video dimensions".to_string(),
+        ));
+    }
+    Ok(ProbeDocument {
+        format: "ea".to_string(),
+        streams: vec![
+            StreamMetadata::video(0, "mpeg2video", width, height, Some(0.0), None),
+            StreamMetadata::audio(1, "adpcm_ea_r2", 44_100, 2, 0, 0.0),
+        ],
     })
 }
 
@@ -474,5 +662,105 @@ mod tests {
         assert_eq!(doc.streams[0].codec_name, "tgq");
         assert_eq!(doc.streams[1].codec_name, "pcm_mulaw");
         assert_eq!(doc.streams[1].bits_per_sample, Some(8));
+    }
+
+    #[test]
+    fn parses_observed_cmv_header() {
+        let mut bytes = b"MVIh".to_vec();
+        bytes.resize(16, 0);
+        bytes[12..14].copy_from_slice(&200_u16.to_le_bytes());
+        bytes[14..16].copy_from_slice(&200_u16.to_le_bytes());
+
+        let doc = parse_ea(&bytes).expect("cmv");
+
+        assert_eq!(doc.format, "ea");
+        assert_eq!(doc.streams[0].codec_name, "cmv");
+        assert_eq!(doc.streams[0].width, Some(200));
+    }
+
+    #[test]
+    fn parses_schl_tqi_video_and_audio() {
+        let mut bytes = b"SCHl".to_vec();
+        bytes.extend_from_slice(&40_u32.to_le_bytes());
+        bytes.extend_from_slice(&[
+            b'P', b'T', 0, 0, 0, 1, 2, 6, 1, 0x65, 0xfd, 0x85, 3, 0x0c, 0xd7, 0x67, 0x82, 1, 2,
+            0x83, 1, 7, 0x8a, 4, 0, 0, 0, 0, 0xff, 0, 0, 0,
+        ]);
+        bytes.extend_from_slice(b"pIQT");
+        bytes.extend_from_slice(&48_u32.to_le_bytes());
+        bytes.extend_from_slice(&400_u16.to_le_bytes());
+        bytes.extend_from_slice(&192_u16.to_le_bytes());
+        bytes.resize(88, 0);
+
+        let doc = parse_ea(&bytes).expect("wve");
+
+        assert_eq!(doc.streams[0].codec_name, "tqi");
+        assert_eq!(doc.streams[0].width, Some(400));
+        assert_eq!(doc.streams[1].codec_name, "adpcm_ea");
+        assert_eq!(doc.streams[1].sample_rate, Some(22_050));
+    }
+
+    #[test]
+    fn parses_schl_mdec_video_and_audio() {
+        let mut bytes = b"SCHl".to_vec();
+        bytes.extend_from_slice(&40_u32.to_le_bytes());
+        bytes.extend_from_slice(&[
+            b'P', b'T', 0, 0, 0, 1, 2, 6, 1, 0x65, 0xfd, 0x85, 3, 0x0c, 0xc3, 0x4e, 0x82, 1, 2,
+            0x83, 1, 7, 0x8a, 4, 0, 0, 0, 0, 0xff, 0, 0, 0,
+        ]);
+        bytes.extend_from_slice(b"mTCD");
+        bytes.extend_from_slice(&48_u32.to_le_bytes());
+        bytes.extend_from_slice(&[0; 4]);
+        bytes.extend_from_slice(&304_u16.to_le_bytes());
+        bytes.extend_from_slice(&224_u16.to_le_bytes());
+        bytes.resize(88, 0);
+
+        let doc = parse_ea(&bytes).expect("dct");
+
+        assert_eq!(doc.streams[0].codec_name, "mdec");
+        assert_eq!(doc.streams[0].height, Some(224));
+        assert_eq!(doc.streams[1].codec_name, "adpcm_ea");
+    }
+
+    #[test]
+    fn parses_maxis_xa_header() {
+        let mut bytes = b"XAJ\0".to_vec();
+        bytes.extend_from_slice(&4_991_668_u32.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        bytes.extend_from_slice(&2_u16.to_le_bytes());
+        bytes.extend_from_slice(&22_050_u16.to_le_bytes());
+        bytes.extend_from_slice(&0_u16.to_le_bytes());
+
+        let doc = parse_ea(&bytes).expect("maxis xa");
+
+        assert_eq!(doc.format, "xa");
+        assert_eq!(doc.streams[0].codec_name, "adpcm_ea_maxis_xa");
+        assert_eq!(doc.streams[0].channels, Some(2));
+    }
+
+    #[test]
+    fn parses_ea_mpc_mpeg_video_and_audio() {
+        let mut bytes = b"MPCh\0\0\0\0\0\0".to_vec();
+        bytes.extend_from_slice(&[0, 0, 1, 0xb3, 0x20, 0x01, 0x00, 0x14]);
+
+        let doc = parse_ea(&bytes).expect("ea mpc");
+
+        assert_eq!(doc.format, "ea");
+        assert_eq!(doc.streams[0].codec_name, "mpeg2video");
+        assert_eq!(doc.streams[0].width, Some(512));
+        assert_eq!(doc.streams[1].codec_name, "adpcm_ea_r2");
+    }
+
+    #[test]
+    fn parses_extension_gated_ea_cdata() {
+        let mut bytes = vec![0; 8];
+        bytes[2..4].copy_from_slice(&48_000_u16.to_be_bytes());
+        bytes[5] = 1;
+
+        let doc = parse_ea_cdata(&bytes).expect("cdata");
+
+        assert_eq!(doc.format, "ea_cdata");
+        assert_eq!(doc.streams[0].codec_name, "adpcm_ea_xas");
+        assert_eq!(doc.streams[0].sample_rate, Some(48_000));
     }
 }

@@ -23,7 +23,7 @@ struct TrackBuilder {
 
 #[derive(Debug, Clone, Copy)]
 enum HeifProperty {
-    HevcConfig,
+    CodecConfig { codec_name: &'static str },
     Ispe { width: u32, height: u32 },
     Other,
 }
@@ -36,6 +36,7 @@ pub fn parse_mp4(bytes: &[u8]) -> Result<ProbeDocument> {
     }
 
     let mut streams = Vec::new();
+    let mut subtitle_only_moov = false;
     let mut pos = 0;
     while pos + 8 <= bytes.len() {
         let header = match next_box(bytes, pos, bytes.len()) {
@@ -53,6 +54,8 @@ pub fn parse_mp4(bytes: &[u8]) -> Result<ProbeDocument> {
             if !parsed.is_empty() {
                 streams = parsed;
                 break;
+            } else if moov_has_only_ignored_subtitle_tracks(bytes, header.data_start, header.end)? {
+                subtitle_only_moov = true;
             }
         } else if &header.name == b"meta" {
             let parsed = parse_heif_meta(bytes, header.data_start, header.end)?;
@@ -64,9 +67,16 @@ pub fn parse_mp4(bytes: &[u8]) -> Result<ProbeDocument> {
     }
 
     if streams.is_empty() {
-        return Err(RmpegError::InvalidData(
-            "MP4 moov box did not contain supported streams".to_string(),
-        ));
+        if subtitle_only_moov {
+            return Ok(ProbeDocument {
+                format: "mp4".to_string(),
+                streams,
+            });
+        } else {
+            return Err(RmpegError::InvalidData(
+                "MP4 moov box did not contain supported streams".to_string(),
+            ));
+        }
     }
     if let Some(fragment_duration) = parse_fragment_duration(bytes)? {
         for stream in &mut streams {
@@ -122,6 +132,52 @@ fn parse_moov(bytes: &[u8], start: usize, end: usize) -> Result<Vec<StreamMetada
     Ok(streams)
 }
 
+fn moov_has_only_ignored_subtitle_tracks(bytes: &[u8], start: usize, end: usize) -> Result<bool> {
+    let mut saw_subtitle = false;
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"trak" {
+            let Some(handler) = trak_handler(bytes, header.data_start, header.end)? else {
+                return Ok(false);
+            };
+            if &handler == b"soun" || &handler == b"vide" {
+                return Ok(false);
+            }
+            if matches!(&handler, b"sbtl" | b"subt" | b"text") {
+                saw_subtitle = true;
+            } else {
+                return Ok(false);
+            }
+        }
+        pos = header.end;
+    }
+    Ok(saw_subtitle)
+}
+
+fn trak_handler(bytes: &[u8], start: usize, end: usize) -> Result<Option<[u8; 4]>> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"mdia" {
+            let mut mdia_pos = header.data_start;
+            while let Some(mdia_header) = next_box(bytes, mdia_pos, header.end)? {
+                if &mdia_header.name == b"hdlr" {
+                    let data = &bytes[mdia_header.data_start..mdia_header.end];
+                    if data.len() < 12 {
+                        return Err(RmpegError::UnexpectedEof {
+                            needed: mdia_header.data_start + 12,
+                            remaining: bytes.len(),
+                        });
+                    }
+                    return Ok(Some([data[8], data[9], data[10], data[11]]));
+                }
+                mdia_pos = mdia_header.end;
+            }
+        }
+        pos = header.end;
+    }
+    Ok(None)
+}
+
 fn parse_heif_meta(bytes: &[u8], start: usize, end: usize) -> Result<Vec<StreamMetadata>> {
     if end.saturating_sub(start) < 4 {
         return Ok(Vec::new());
@@ -158,7 +214,8 @@ fn parse_heif_ipco(bytes: &[u8], start: usize, end: usize) -> Result<Vec<HeifPro
     let mut pos = start;
     while let Some(header) = next_box(bytes, pos, end)? {
         let property = match &header.name {
-            b"hvcC" => HeifProperty::HevcConfig,
+            b"hvcC" => HeifProperty::CodecConfig { codec_name: "hevc" },
+            b"av1C" => HeifProperty::CodecConfig { codec_name: "av1" },
             b"ispe" if header.data_start + 12 <= header.end => HeifProperty::Ispe {
                 width: read_u32(bytes, header.data_start + 4)?,
                 height: read_u32(bytes, header.data_start + 8)?,
@@ -201,7 +258,7 @@ fn parse_heif_ipma(
         }
         let association_count = usize::from(bytes[pos]);
         pos += 1;
-        let mut has_hevc = false;
+        let mut codec_name = None;
         let mut dimensions = None;
         for _ in 0..association_count {
             let property_index = if flags & 1 != 0 {
@@ -226,15 +283,17 @@ fn parse_heif_ipma(
                 continue;
             };
             match *property {
-                HeifProperty::HevcConfig => has_hevc = true,
+                HeifProperty::CodecConfig {
+                    codec_name: property_codec,
+                } => codec_name = Some(property_codec),
                 HeifProperty::Ispe { width, height } => dimensions = Some((width, height)),
                 HeifProperty::Other => {}
             }
         }
-        if let (true, Some((width, height))) = (has_hevc, dimensions) {
+        if let (Some(codec_name), Some((width, height))) = (codec_name, dimensions) {
             streams.push(StreamMetadata::video(
                 streams.len(),
-                "hevc",
+                codec_name,
                 width,
                 height,
                 None,
@@ -1102,5 +1161,67 @@ mod tests {
         assert_eq!(codec_name(*b"rpza"), "rpza");
         assert_eq!(codec_name(*b"smc "), "smc");
         assert_eq!(codec_name(*b"v410"), "rawvideo");
+    }
+
+    #[test]
+    fn parses_avif_item_property_association() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&box_bytes(b"ftyp", b"avif\0\0\0\0avifmif1"));
+
+        let mut ipco = Vec::new();
+        let mut ispe = vec![0; 12];
+        ispe[4..8].copy_from_slice(&352_u32.to_be_bytes());
+        ispe[8..12].copy_from_slice(&288_u32.to_be_bytes());
+        ipco.extend_from_slice(&box_bytes(b"ispe", &ispe));
+        ipco.extend_from_slice(&box_bytes(b"av1C", &[0x81, 0x00, 0x0c, 0x00]));
+
+        let mut ipma = vec![0, 0, 0, 0];
+        ipma.extend_from_slice(&1_u32.to_be_bytes());
+        ipma.extend_from_slice(&1_u16.to_be_bytes());
+        ipma.push(2);
+        ipma.push(1);
+        ipma.push(2);
+
+        let mut iprp = Vec::new();
+        iprp.extend_from_slice(&box_bytes(b"ipco", &ipco));
+        iprp.extend_from_slice(&box_bytes(b"ipma", &ipma));
+
+        let mut meta = vec![0; 4];
+        meta.extend_from_slice(&box_bytes(b"iprp", &iprp));
+        bytes.extend_from_slice(&box_bytes(b"meta", &meta));
+
+        let doc = parse_mp4(&bytes).expect("avif");
+
+        assert_eq!(doc.format, "mp4");
+        assert_eq!(doc.streams.len(), 1);
+        assert_eq!(doc.streams[0].codec_name, "av1");
+        assert_eq!(doc.streams[0].width, Some(352));
+        assert_eq!(doc.streams[0].height, Some(288));
+    }
+
+    #[test]
+    fn accepts_subtitle_only_mp4_as_empty_probe_document() {
+        let mut hdlr = vec![0; 12];
+        hdlr[8..12].copy_from_slice(b"sbtl");
+        let mdia = box_bytes(b"hdlr", &hdlr);
+        let trak = box_bytes(b"mdia", &mdia);
+        let moov = box_bytes(b"trak", &trak);
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&box_bytes(b"ftyp", b"isom\0\0\0\0isom"));
+        bytes.extend_from_slice(&box_bytes(b"moov", &moov));
+
+        let doc = parse_mp4(&bytes).expect("subtitle-only mp4");
+
+        assert_eq!(doc.format, "mp4");
+        assert!(doc.streams.is_empty());
+    }
+
+    fn box_bytes(name: &[u8; 4], data: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&(data.len() as u32 + 8).to_be_bytes());
+        out.extend_from_slice(name);
+        out.extend_from_slice(data);
+        out
     }
 }
