@@ -7,6 +7,7 @@ use crate::{
     avi::{looks_like_avi, parse_avi},
     bmp::{looks_like_bmp, parse_bmp},
     dds::parse_dds,
+    dts::{looks_like_mpegts, looks_like_raw_dts, parse_dtshd, parse_mpegts_dts, parse_raw_dts},
     exr::{looks_like_exr, parse_exr},
     flac::parse_flac,
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
@@ -74,6 +75,18 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"wvpk") {
         return parse_wavpack(bytes);
+    }
+
+    if bytes.starts_with(b"DTSHDHDR") {
+        return parse_dtshd(bytes);
+    }
+
+    if looks_like_raw_dts(bytes) {
+        return parse_raw_dts(bytes);
+    }
+
+    if looks_like_mpegts(bytes) {
+        return parse_mpegts_dts(bytes);
     }
 
     if looks_like_webp(bytes) {

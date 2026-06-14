@@ -71,3 +71,9 @@
 - MP4 ALS can appear under an `mp4a` sample entry with Audio Object Type 36. The ALS config in the FATE files embeds a small original WAVE header after the `ALS\0` marker, which is the simplest observed source for channels, sample rate, and bits per sample without decoding ALS frames.
 
 - AVI stream metadata is enough for the UtVideo FATE fixtures: `strh` carries stream type, handler, `dwScale`, `dwRate`, and `dwLength`, while `strf` carries BITMAPINFOHEADER dimensions and compression fourcc. Stream duration should be `dwLength * dwScale / dwRate`; no frame payload parsing is needed for the current probe comparator.
+
+- DTS-HD `.dtshd` chunks use 8-byte chunk ids followed by 8-byte big-endian sizes. The observed `AUPR-HDR` payload stores sample rate as a 24-bit big-endian field starting at byte 3, duration quanta as a 16-bit field at byte 14, and a channel-mask field at byte 16 whose low byte varies with rate. Normalize the channel mask by ignoring that low byte.
+
+- Raw DTS core headers expose only the core layout; `dts_es.dts` needs the extension-audio flag to report 6.1, while the DTS-HD MA raw fixture carries an extension-substream sync marker later in the file and ffprobe reports 7.1/24-bit with no duration. Keep those as observed metadata heuristics until a fuller DTS parser exists.
+
+- The DTS MPEG-TS fixture can be probed without a general TS demuxer by scanning payload-unit-start PES packets for DTS core sync and using the first/last PES PTS span for duration.
