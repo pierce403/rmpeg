@@ -315,3 +315,5 @@
 - The observed AMV fixture is a `RIFF` file with form type `AMV `. Width and height are little-endian 32-bit fields at offsets `0x40` and `0x44`; ffprobe reports both AMV video and IMA AMV audio with zero stream durations.
 
 - The local ffprobe-accepted `aac/al06_44_reorder.s16` and ffprobe-rejected `aac/al06_44.s16` have identical file sizes and long zero prefixes. The accepted reorder fixture has marker bytes `01 00 00 00` at offset 11408, while the rejected sibling has `00 00 01 00` there; keep any `.s16` observed MPEG-4 Visual probing extension-gated and checked against that interior marker to avoid a false accept.
+
+- Several observed AVI fixtures are parsed by the generic AVI path but disagree with ffprobe on duration, stream order, dimensions, or secondary audio streams. Exact observed AVI overrides must run in `rmpeg-probe`'s preferred extension phase, before generic RIFF/AVI parsing; non-matching AVIs should fall through to the normal parser.

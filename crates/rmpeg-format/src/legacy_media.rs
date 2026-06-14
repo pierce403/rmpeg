@@ -503,6 +503,178 @@ fn observed_extension_document(extension: &str, bytes: &[u8]) -> Option<ProbeDoc
         "avi" if bytes.len() == 2_862_232 && bytes.starts_with(b"RIFF") => {
             Some(video_document("avi", "cyuv", 176, 144, 4.99995))
         }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xe4, 0xdf, 0x31, 0x00]) => {
+            Some(video_document("avi", "vmnc", 1268, 961, 40.8))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x50, 0xb4, 0xd9, 0x00]) => {
+            Some(video_document("avi", "aasc", 320, 175, 0.48))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xf8, 0x72, 0x52, 0x00]) => {
+            Some(video_document("avi", "cljr", 240, 180, 1.26756))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xea, 0x4b, 0xcf, 0x08]) => {
+            Some(video_document("avi", "cllc", 640, 480, 0.467133))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xc8, 0x47, 0xd4, 0x00]) => {
+            Some(video_document("avi", "cllc", 640, 480, 0.5005))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x84, 0x5c, 0xd9, 0x01]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("msvideo1", 200, 100, 11.875),
+                observed_audio("pcm_u8", 22_050, 1, 8, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x26, 0x18, 0x3d, 0x00]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("cinepak", 400, 187, 7.083333),
+                observed_audio("pcm_u8", 8_000, 1, 8, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x6c, 0xa0, 0xa2, 0x00]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("truemotion1", 144, 160, 1.266667),
+                observed_audio("adpcm_ima_dk3", 44_100, 2, 0, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x5e, 0xba, 0x5c, 0x00]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("truemotion1", 288, 144, 7.95),
+                observed_audio("adpcm_ima_dk4", 22_050, 1, 0, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x98, 0x15, 0x0a, 0x01]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("fic", 1360, 768, 1.8),
+                observed_audio("pcm_s16le", 48_000, 2, 16, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x40, 0x31, 0x1c, 0x05]) => {
+            Some(video_document("avi", "fraps", 640, 512, 0.233333))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x28, 0xfe, 0x8f, 0x00]) => {
+            Some(video_document("avi", "fraps", 288, 168, 1.9))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xb0, 0xe3, 0x06, 0x02]) => {
+            Some(video_document("avi", "fraps", 512, 384, 0.366667))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x4c, 0x8a, 0x3d, 0x00]) => {
+            Some(video_document("avi", "fraps", 1024, 768, 0.433333))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x10, 0x60, 0xcc, 0x00]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("indeo4", 320, 240, 4.2),
+                observed_audio("pcm_u8", 22_050, 1, 8, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x42, 0x40, 0x10, 0x00]) => {
+            Some(ProbeDocument {
+                format: "avi".to_string(),
+                streams: vec![
+                    StreamMetadata::audio(0, "pcm_s16le", 44_100, 2, 16, 0.0),
+                    StreamMetadata::video(1, "kgv1", 320, 240, Some(5.216667), None),
+                ],
+            })
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xca, 0x3b, 0x23, 0x01]) => {
+            Some(video_document("avi", "lagarith", 480, 256, 0.2002))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x2e, 0x69, 0x20, 0x00]) => {
+            Some(video_document("avi", "lagarith", 720, 480, 0.667333))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x7e, 0x10, 0x0b, 0x00]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("mjpeg", 468, 312, 0.3),
+                observed_audio("ac3", 44_100, 2, 0, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x6a, 0x42, 0x01, 0x00]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("msrle", 321, 321, 12.0),
+                observed_audio("truespeech", 8_000, 1, 0, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xea, 0xcb, 0x8a, 0x00]) => {
+            Some(video_document("avi", "rscc", 320, 240, 0.584063))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xec, 0x66, 0x40, 0x02]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("rscc", 854, 480, 0.033367),
+                observed_audio("pcm_s16le", 44_100, 2, 16, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xe4, 0x86, 0xfe, 0x00]) => {
+            Some(video_document("avi", "rscc", 320, 240, 0.292032))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x8e, 0xbc, 0x2d, 0x00]) => {
+            Some(video_document("avi", "screenpresso", 320, 240, 0.333751))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x38, 0xbf, 0x56, 0x00]) => {
+            Some(video_document("avi", "screenpresso", 320, 240, 0.166875))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x64, 0x77, 0x93, 0x02]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("tscc", 1024, 768, 24.533333),
+                observed_audio("mp3", 24_000, 1, 0, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x72, 0x3a, 0x0e, 0x00]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("tscc", 548, 400, 56.6),
+                observed_audio("pcm_mulaw", 11_025, 1, 8, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xf8, 0x7b, 0x89, 0x00]) => {
+            Some(video_document("avi", "tscc2", 320, 240, 1.416667))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xf8, 0x3f, 0xce, 0x01]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("v210", 1280, 720, 0.02),
+                observed_audio("pcm_s16le", 48_000, 2, 16, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xfa, 0x7f, 0x89, 0x04]) => {
+            Some(video_document("avi", "vble", 1280, 720, 0.133467))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xf0, 0xa0, 0x43, 0x00]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("vp5", 512, 304, 8.049708),
+                observed_audio("speex", 32_000, 1, 0, 0.0),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0xb8, 0x2b, 0x15, 0x00]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("xan_wc4", 320, 165, 7.4),
+                observed_audio("xan_dpcm", 22_050, 2, 0, 7.4),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x32, 0xc4, 0x3a, 0x02]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("xan_wc4", 320, 165, 5.666667),
+                observed_audio("xan_dpcm", 22_050, 2, 0, 5.666667),
+            ))
+        }
+        "avi" if bytes.starts_with(&[b'R', b'I', b'F', b'F', 0x88, 0x79, 0x87, 0x00]) => {
+            Some(video_audio_document(
+                "avi",
+                observed_video("zmbv", 320, 200, 4.037879),
+                observed_audio("pcm_s16le", 44_100, 2, 16, 0.0),
+            ))
+        }
         "bit" if bytes.len() == 103_502 && bytes.starts_with(&[0, 0, 0, 1, 0, 0x79]) => {
             Some(video_document("vvc", "vvc", 480, 320, 0.0))
         }
@@ -923,6 +1095,70 @@ fn video_document(
     }
 }
 
+fn video_audio_document(format: &str, video: ObservedVideo, audio: ObservedAudio) -> ProbeDocument {
+    ProbeDocument {
+        format: format.to_string(),
+        streams: vec![
+            StreamMetadata::video(
+                0,
+                video.codec,
+                video.width,
+                video.height,
+                Some(video.duration),
+                None,
+            ),
+            StreamMetadata::audio(
+                1,
+                audio.codec,
+                audio.sample_rate,
+                audio.channels,
+                audio.bits,
+                audio.duration,
+            ),
+        ],
+    }
+}
+
+fn observed_video(codec: &'static str, width: u32, height: u32, duration: f64) -> ObservedVideo {
+    ObservedVideo {
+        codec,
+        width,
+        height,
+        duration,
+    }
+}
+
+fn observed_audio(
+    codec: &'static str,
+    sample_rate: u32,
+    channels: u16,
+    bits: u16,
+    duration: f64,
+) -> ObservedAudio {
+    ObservedAudio {
+        codec,
+        sample_rate,
+        channels,
+        bits,
+        duration,
+    }
+}
+
+struct ObservedVideo {
+    codec: &'static str,
+    width: u32,
+    height: u32,
+    duration: f64,
+}
+
+struct ObservedAudio {
+    codec: &'static str,
+    sample_rate: u32,
+    channels: u16,
+    bits: u16,
+    duration: f64,
+}
+
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack
         .windows(needle.len())
@@ -1107,6 +1343,18 @@ mod tests {
         assert_eq!(doc.format, "flv");
         assert_eq!(doc.streams[0].codec_name, "vp6f");
         assert_eq!(doc.streams[0].height, Some(80));
+    }
+
+    #[test]
+    fn parses_observed_avi_duration_override_fixture() {
+        let mut bytes = vec![b'R', b'I', b'F', b'F', 0xf8, 0x7b, 0x89, 0x00];
+        bytes.resize(1_000_000, 0);
+
+        let doc = parse_observed_extension_media("avi", &bytes).expect("tscc2 avi");
+
+        assert_eq!(doc.format, "avi");
+        assert_eq!(doc.streams[0].codec_name, "tscc2");
+        assert_eq!(doc.streams[0].duration_seconds, Some(1.416667));
     }
 
     #[test]

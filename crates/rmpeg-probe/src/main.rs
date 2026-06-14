@@ -46,6 +46,7 @@ fn probe_preferred_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> 
     let extension = extension_lowercase(path)?;
     match extension.as_str() {
         "act" => parse_act(input),
+        "avi" => parse_observed_extension_media(&extension, input),
         _ => Err(RmpegError::InvalidData(
             "unsupported preferred extension".to_string(),
         )),
