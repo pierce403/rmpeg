@@ -1,12 +1,20 @@
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 
 pub fn looks_like_ea(bytes: &[u8]) -> bool {
-    bytes.starts_with(b"MVhd") || bytes.starts_with(b"AVP6") || bytes.starts_with(b"MADk")
+    bytes.starts_with(b"MVhd")
+        || bytes.starts_with(b"AVP6")
+        || bytes.starts_with(b"MADk")
+        || bytes.starts_with(b"SEAD")
+        || bytes.starts_with(b"kVGT")
+        || bytes.starts_with(b"1SNh")
 }
 
 pub fn parse_ea(bytes: &[u8]) -> Result<ProbeDocument> {
     if bytes.starts_with(b"MADk") {
         return parse_mad(bytes);
+    }
+    if bytes.starts_with(b"SEAD") || bytes.starts_with(b"kVGT") || bytes.starts_with(b"1SNh") {
+        return parse_tgv_or_tgq(bytes);
     }
 
     let mut streams = Vec::new();
@@ -53,6 +61,152 @@ pub fn parse_ea(bytes: &[u8]) -> Result<ProbeDocument> {
         format: "ea".to_string(),
         streams,
     })
+}
+
+fn parse_tgv_or_tgq(bytes: &[u8]) -> Result<ProbeDocument> {
+    let mut tgv_video = None;
+    let mut tgq_video = None;
+    let mut sead_audio = None;
+    let mut eacs_audio = None;
+    let mut pos = 0;
+
+    while pos + 8 <= bytes.len() {
+        let id = &bytes[pos..pos + 4];
+        match id {
+            b"SEAD" => {
+                let size = read_u32(bytes, pos + 4)? as usize;
+                if size < 8 || pos + size > bytes.len() {
+                    break;
+                }
+                let data = &bytes[pos + 8..pos + size];
+                if data.len() >= 8 {
+                    let sample_rate = read_u32(data, 0)?;
+                    let channels = read_u32(data, 4)?;
+                    if sample_rate != 0 && (1..=8).contains(&channels) {
+                        sead_audio = Some((sample_rate, channels as u16));
+                    }
+                }
+                pos += size + (size & 1);
+            }
+            b"kVGT" => {
+                let size = read_u32(bytes, pos + 4)? as usize;
+                if size < 16 || pos + size > bytes.len() {
+                    break;
+                }
+                let data = &bytes[pos + 8..pos + size];
+                let width = u32::from(read_u16(data, 0)?);
+                let height = u32::from(read_u16(data, 2)?);
+                if width != 0 && height != 0 {
+                    tgv_video = Some((width, height));
+                }
+                pos += size + (size & 1);
+            }
+            b"1SNh" => {
+                let size = chunk_size_either_endian(bytes, pos + 4)?;
+                if size < 16 || pos + size > bytes.len() {
+                    break;
+                }
+                let data = &bytes[pos + 8..pos + size];
+                if let Some(audio) = parse_eacs(data)? {
+                    eacs_audio = Some(audio);
+                }
+                pos += size + (size & 1);
+            }
+            b"TGQs" => {
+                let size = read_u32_be(bytes, pos + 4)? as usize;
+                if size < 16 || pos + size > bytes.len() {
+                    break;
+                }
+                let width = u32::from(read_u16_be(bytes, pos + 8)?);
+                let height = u32::from(read_u16_be(bytes, pos + 10)?);
+                if width != 0 && height != 0 {
+                    tgq_video = Some((width, height));
+                }
+                pos += size + (size & 1);
+            }
+            _ => {
+                pos += 1;
+            }
+        }
+    }
+
+    let mut streams = Vec::new();
+    if let Some((width, height)) = tgv_video {
+        streams.push(StreamMetadata::video(
+            streams.len(),
+            "tgv",
+            width,
+            height,
+            Some(0.0),
+            None,
+        ));
+    } else if let Some((width, height)) = tgq_video {
+        streams.push(StreamMetadata::video(
+            streams.len(),
+            "tgq",
+            width,
+            height,
+            Some(0.0),
+            None,
+        ));
+    }
+
+    if let Some((sample_rate, channels)) = sead_audio {
+        streams.push(StreamMetadata::audio(
+            streams.len(),
+            "adpcm_ima_ea_sead",
+            sample_rate,
+            channels,
+            4,
+            0.0,
+        ));
+    } else if let Some((sample_rate, channels)) = eacs_audio {
+        let (codec, bits) = if tgq_video.is_some() {
+            ("pcm_mulaw", 8)
+        } else {
+            ("adpcm_ima_ea_eacs", 0)
+        };
+        streams.push(StreamMetadata::audio(
+            streams.len(),
+            codec,
+            sample_rate,
+            channels,
+            bits,
+            0.0,
+        ));
+    }
+
+    if streams.is_empty() {
+        return Err(RmpegError::InvalidData(
+            "EA TGV/TGQ file has no supported streams".to_string(),
+        ));
+    }
+    Ok(ProbeDocument {
+        format: "ea".to_string(),
+        streams,
+    })
+}
+
+fn parse_eacs(data: &[u8]) -> Result<Option<(u32, u16)>> {
+    let Some(pos) = find_bytes(data, b"EACS") else {
+        return Ok(None);
+    };
+    if pos + 12 > data.len() {
+        return Ok(None);
+    }
+    let raw = &data[pos + 4..pos + 8];
+    let sample_rate_le = u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]);
+    let sample_rate_be = u32::from_be_bytes([raw[0], raw[1], raw[2], raw[3]]);
+    let sample_rate = if (1..=192_000).contains(&sample_rate_le) {
+        sample_rate_le
+    } else {
+        sample_rate_be
+    };
+    let channels = data[pos + 8];
+    if sample_rate == 0 || sample_rate > 192_000 || channels == 0 || channels > 8 {
+        return Ok(None);
+    }
+    Ok(Some((sample_rate, u16::from(channels))))
 }
 
 fn parse_mad(bytes: &[u8]) -> Result<ProbeDocument> {
@@ -191,6 +345,22 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
     ]))
 }
 
+fn read_u32_be(bytes: &[u8], offset: usize) -> Result<u32> {
+    let end = offset + 4;
+    if end > bytes.len() {
+        return Err(RmpegError::UnexpectedEof {
+            needed: end,
+            remaining: bytes.len(),
+        });
+    }
+    Ok(u32::from_be_bytes([
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+    ]))
+}
+
 fn read_u16(bytes: &[u8], offset: usize) -> Result<u16> {
     let end = offset + 2;
     if end > bytes.len() {
@@ -200,6 +370,29 @@ fn read_u16(bytes: &[u8], offset: usize) -> Result<u16> {
         });
     }
     Ok(u16::from_le_bytes([bytes[offset], bytes[offset + 1]]))
+}
+
+fn read_u16_be(bytes: &[u8], offset: usize) -> Result<u16> {
+    let end = offset + 2;
+    if end > bytes.len() {
+        return Err(RmpegError::UnexpectedEof {
+            needed: end,
+            remaining: bytes.len(),
+        });
+    }
+    Ok(u16::from_be_bytes([bytes[offset], bytes[offset + 1]]))
+}
+
+fn chunk_size_either_endian(bytes: &[u8], offset: usize) -> Result<usize> {
+    let le = read_u32(bytes, offset)? as usize;
+    if le >= 8 && offset - 4 + le <= bytes.len() {
+        return Ok(le);
+    }
+    let be = read_u32_be(bytes, offset)? as usize;
+    if be >= 8 && offset - 4 + be <= bytes.len() {
+        return Ok(be);
+    }
+    Ok(le)
 }
 
 #[cfg(test)]
@@ -240,5 +433,46 @@ mod tests {
         assert_eq!(doc.streams[1].codec_name, "adpcm_ea_r1");
         assert_eq!(doc.streams[1].sample_rate, Some(48_000));
         assert_eq!(doc.streams[1].channels, Some(2));
+    }
+
+    #[test]
+    fn parses_tgv_with_sead_audio() {
+        let mut bytes = b"SEAD".to_vec();
+        bytes.extend_from_slice(&20_u32.to_le_bytes());
+        bytes.extend_from_slice(&22_050_u32.to_le_bytes());
+        bytes.extend_from_slice(&2_u32.to_le_bytes());
+        bytes.extend_from_slice(&[0; 4]);
+        bytes.extend_from_slice(b"kVGT");
+        bytes.extend_from_slice(&16_u32.to_le_bytes());
+        bytes.extend_from_slice(&320_u16.to_le_bytes());
+        bytes.extend_from_slice(&200_u16.to_le_bytes());
+        bytes.extend_from_slice(&[0; 4]);
+
+        let doc = parse_ea(&bytes).expect("tgv");
+
+        assert_eq!(doc.streams[0].codec_name, "tgv");
+        assert_eq!(doc.streams[1].codec_name, "adpcm_ima_ea_sead");
+        assert_eq!(doc.streams[1].bits_per_sample, Some(4));
+    }
+
+    #[test]
+    fn parses_tgq_with_eacs_audio() {
+        let mut bytes = b"1SNh".to_vec();
+        bytes.extend_from_slice(&40_u32.to_be_bytes());
+        bytes.extend_from_slice(b"EACS");
+        bytes.extend_from_slice(&22_050_u32.to_be_bytes());
+        bytes.extend_from_slice(&[2, 2, 1, 0]);
+        bytes.resize(40, 0);
+        bytes.extend_from_slice(b"TGQs");
+        bytes.extend_from_slice(&16_u32.to_be_bytes());
+        bytes.extend_from_slice(&208_u16.to_be_bytes());
+        bytes.extend_from_slice(&112_u16.to_be_bytes());
+        bytes.extend_from_slice(&[0; 4]);
+
+        let doc = parse_ea(&bytes).expect("tgq");
+
+        assert_eq!(doc.streams[0].codec_name, "tgq");
+        assert_eq!(doc.streams[1].codec_name, "pcm_mulaw");
+        assert_eq!(doc.streams[1].bits_per_sample, Some(8));
     }
 }

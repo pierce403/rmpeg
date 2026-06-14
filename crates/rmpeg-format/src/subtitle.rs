@@ -12,11 +12,46 @@ pub fn parse_subtitle(bytes: &[u8]) -> Result<ProbeDocument> {
     })
 }
 
+pub fn parse_pgs_sup(bytes: &[u8]) -> Result<ProbeDocument> {
+    if !looks_like_pgs_sup(bytes) {
+        return Err(RmpegError::InvalidData(
+            "missing PGS subtitle header".to_string(),
+        ));
+    }
+    Ok(ProbeDocument {
+        format: "sup".to_string(),
+        streams: Vec::new(),
+    })
+}
+
+pub fn parse_vobsub_mpeg(bytes: &[u8]) -> Result<ProbeDocument> {
+    if !looks_like_vobsub_mpeg(bytes) {
+        return Err(RmpegError::InvalidData(
+            "missing VobSub MPEG private stream".to_string(),
+        ));
+    }
+    Ok(ProbeDocument {
+        format: "mpeg".to_string(),
+        streams: Vec::new(),
+    })
+}
+
 pub fn looks_like_subtitle(bytes: &[u8]) -> bool {
     let bytes = strip_utf8_bom(bytes);
     let text = String::from_utf8_lossy(bytes);
     let trimmed = text.trim_start_matches(|c: char| c.is_ascii_whitespace());
     detect_format(bytes, trimmed).is_some()
+}
+
+pub fn looks_like_pgs_sup(bytes: &[u8]) -> bool {
+    bytes.len() >= 13
+        && bytes.starts_with(b"PG")
+        && matches!(bytes[10], 0x14 | 0x15 | 0x16 | 0x17 | 0x80)
+}
+
+pub fn looks_like_vobsub_mpeg(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0x00, 0x00, 0x01, 0xba])
+        && find_bytes(bytes, &[0x00, 0x00, 0x01, 0xbd]).is_some()
 }
 
 fn detect_format(bytes: &[u8], text: &str) -> Option<&'static str> {
@@ -95,6 +130,12 @@ fn contains_ignore_ascii_case(value: &str, needle: &str) -> bool {
         .as_bytes()
         .windows(needle.len())
         .any(|window| window.eq_ignore_ascii_case(needle.as_bytes()))
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn looks_like_mpl2(text: &str) -> bool {
@@ -228,5 +269,14 @@ mod tests {
             assert_eq!(doc.format, format);
             assert!(doc.streams.is_empty());
         }
+    }
+
+    #[test]
+    fn parses_subtitle_only_binary_formats_without_streams() {
+        let pgs = [b'P', b'G', 0, 0, 0, 0, 0, 0, 0, 0, 0x16, 0, 0];
+        let vobsub = [0x00, 0x00, 0x01, 0xba, 0, 0, 0, 0x00, 0x00, 0x01, 0xbd];
+
+        assert_eq!(parse_pgs_sup(&pgs).unwrap().format, "sup");
+        assert_eq!(parse_vobsub_mpeg(&vobsub).unwrap().format, "mpeg");
     }
 }

@@ -5,11 +5,14 @@ use crate::{
     ac3::{looks_like_raw_ac3_or_eac3, parse_raw_ac3_or_eac3},
     alp::{looks_like_alp, parse_alp},
     amr::parse_amr_nb,
+    amv::{looks_like_amv, parse_amv},
     ape::parse_ape,
     apm::{looks_like_apm, parse_apm},
+    apv::{looks_like_apv, parse_apv},
     asf::{looks_like_asf, parse_asf},
     avi::{looks_like_avi, parse_avi},
     bethsoftvid::{looks_like_bethsoftvid, parse_bethsoftvid},
+    bfi::{looks_like_bfi, parse_bfi},
     bfstm::{looks_like_bfstm_or_brstm, parse_bfstm_or_brstm},
     bink::{looks_like_bink, parse_bink},
     bmp::{looks_like_bmp, parse_bmp},
@@ -31,6 +34,7 @@ use crate::{
     gif::{looks_like_gif, parse_gif},
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
     hevc::{looks_like_hevc_annex_b, parse_hevc_annex_b},
+    idcin::{looks_like_idcin, parse_idcin},
     iff::{looks_like_iff, parse_iff},
     ivf::parse_ivf,
     jpeg::{looks_like_jpeg, parse_jpeg},
@@ -52,6 +56,7 @@ use crate::{
     png::{looks_like_png, parse_png},
     pnm::{looks_like_binary_pnm, parse_pnm},
     psd::{looks_like_psd, parse_psd},
+    psxstr::{looks_like_psxstr, parse_psxstr},
     ptx::{looks_like_ptx, parse_ptx},
     qcp::{looks_like_qcp, parse_qcp},
     qoa::{looks_like_qoa, parse_qoa},
@@ -59,7 +64,10 @@ use crate::{
     rpl::{looks_like_rpl, parse_rpl},
     rsd::{looks_like_rsd, parse_rsd},
     sgi::{looks_like_sgi, parse_sgi},
+    sgi_mv::{looks_like_sgi_mv, parse_sgi_mv},
+    smacker::{looks_like_smacker, parse_smacker},
     smjpeg::{looks_like_smjpeg, parse_smjpeg},
+    sol::{looks_like_sol, parse_sol},
     subtitle::{looks_like_subtitle, parse_subtitle},
     sunrast::{looks_like_sunrast, parse_sunrast},
     tak::parse_tak,
@@ -111,6 +119,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_avi(bytes);
     }
 
+    if looks_like_amv(bytes) {
+        return parse_amv(bytes);
+    }
+
     if looks_like_vqa(bytes) {
         return parse_vqa(bytes);
     }
@@ -153,6 +165,18 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_rpl(bytes) {
         return parse_rpl(bytes);
+    }
+
+    if looks_like_sgi_mv(bytes) {
+        return parse_sgi_mv(bytes);
+    }
+
+    if looks_like_psxstr(bytes) {
+        return parse_psxstr(bytes);
+    }
+
+    if looks_like_apv(bytes) {
+        return parse_apv(bytes);
     }
 
     if looks_like_adts_aac(bytes) {
@@ -229,6 +253,22 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_bink(bytes) {
         return parse_bink(bytes);
+    }
+
+    if looks_like_bfi(bytes) {
+        return parse_bfi(bytes);
+    }
+
+    if looks_like_smacker(bytes) {
+        return parse_smacker(bytes);
+    }
+
+    if looks_like_idcin(bytes) {
+        return parse_idcin(bytes);
+    }
+
+    if looks_like_sol(bytes) {
+        return parse_sol(bytes);
     }
 
     if looks_like_smjpeg(bytes) {

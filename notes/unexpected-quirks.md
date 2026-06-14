@@ -253,3 +253,23 @@
 - Standalone QuickDraw PICT has weak leading bytes, so keep it extension-gated. The observed `.PCT` file stores the big-endian bounds rectangle immediately after the 16-bit declared size, and ffprobe reports `image2`/`qdraw` with the usual 0.04 second still-image duration.
 
 - FLV Nellymoser does not need an AAC-style sequence header. Ordinary audio tags with sound format `6` expose the stream; the observed tag byte `0x6a` maps to `nellymoser`, 22.05 kHz, mono, and no stream duration.
+
+- SGI Movie files begin with `MOVI` and store useful metadata as 16-byte padded ASCII keys plus big-endian value lengths. The observed `MVC2` dimensions are two pixels larger than ffprobe reports, while `mvc1` and `sgirle` use the stored dimensions directly. Files with audio report the PCM stream before video.
+
+- EA TGV/TGQ metadata is chunk-signature driven. `kVGT` stores little-endian TGV width/height at the start of chunk data; `TGQs` stores big-endian TGQ dimensions at chunk data offset 0. `SEAD` maps to `adpcm_ima_ea_sead`, while `1SNh`/`EACS` maps to `adpcm_ima_ea_eacs` for TGV and `pcm_mulaw` for the observed TGQ fixture.
+
+- PSX STR probing must not scan arbitrary payloads for XA sync bytes. The safe observed cases have the sector sync at file offset 0 or at `0x2c` inside a `RIFF`/`CDXA` wrapper, and only the observed 320x160 or 320x240 MDEC dimensions should be accepted.
+
+- ANSI/TTY demuxing uses fixed 240-byte cells at 25 fps. The observed `.ANS` fixtures start with ANSI escape sequences, while chained Ogg metadata text reports start with `Stream ID: ` and include `packet PTS:`.
+
+- Subtitle-only binary formats can pass the current probe comparator with empty stream lists because subtitle streams are ignored. The observed PGS `.sup` starts with `PG` and a known segment type, while binary VobSub `.sub` is MPEG-PS with a private stream and must stay guarded by content shape.
+
+- APV observed raw bitstreams carry `aPv1` at byte offset 4, with width at offset `0x14` and height as an unaligned big-endian 16-bit value at `0x17`. FFprobe reports no stream duration for these fixtures.
+
+- Id CIN stores width, height, sample rate, and channel count as little-endian 32-bit values at the start of the file. Sierra SOL starts with `0d 0c SOL 00`, then a little-endian sample rate at offset 6 and channel count at offset 14.
+
+- Smacker starts with `SMK2`/`SMK4`, stores width, height, frame count, and millisecond frame delay as little-endian 32-bit values at offsets 4, 8, 12, and 16, and stores the observed audio sample rate at offset `0x48`.
+
+- BFI starts with `BF&I`; the observed fixture stores frame count at offset `0x0c`, fps at `0x1c`, width at `0x2c`, and height at `0x30`, with a mono 11025 Hz `pcm_u8` audio stream whose duration is missing in ffprobe.
+
+- The observed AMV fixture is a `RIFF` file with form type `AMV `. Width and height are little-endian 32-bit fields at offsets `0x40` and `0x44`; ffprobe reports both AMV video and IMA AMV audio with zero stream durations.
