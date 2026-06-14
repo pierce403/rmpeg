@@ -54,11 +54,11 @@ The public site currently reports the deployed snapshot. Local runs may differ
 from GitHub Actions because `ffprobe` versions differ. Treat the current oracle
 snapshot as data, not as a hardcoded expected total.
 
-Current local full-corpus snapshot from 2026-06-14 after narrow QCP/NIST/W64/XBM/VQA/WAV/RSD metadata probing:
+Current local full-corpus snapshot from 2026-06-14 after narrow raw ADP/ACT/G.728/CDG/Pictor/PTX/X-Face metadata probing:
 
 ```text
-1851 / 2178 strict media matches = 85.0%
-2183 / 2511 total corpus passes, including files both tools reject
+1874 / 2178 strict media matches = 86.0%
+2206 / 2511 total corpus passes, including files both tools reject
 0 corpus errors
 1 known false accept: aac/usac/Ext_2_c1_Ln_0x03.mp4
 ```

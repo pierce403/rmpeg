@@ -220,6 +220,18 @@
 
 - Westwood AUD and raw ADP/DTK have weak or no leading magic in the observed corpus. Keep them extension-gated in `rmpeg-probe`; ADP/DTK duration matches `file_size * 7 / 8 / 48000`, and the observed AUD duration is `data_size * 2 / sample_rate`.
 
+- Some Opus conformance `.dec` files are decoded-looking raw PCM, but local ffprobe still probes exactly nine of them as extension/probe-score `adp`/`adpcm_dtk`. The accepted subset has an early nonzero signal and exact duplicated little-endian 16-bit stereo sample pairs over a large initial window; nearby rejected `.dec` files either mismatch early, are too small, or start nonzero much later. Keep any `.dec` ADP handling extension-gated and guarded by that shape.
+
+- Local ffprobe also probes exactly five `.pcm` files as raw `adp`/`adpcm_dtk`: three ATRAC1 decoded PCM references plus `dst/dst-64fs44-2ch.pcm` and `filter/tremolo.pcm`. The local accepted subset has exact duplicated little-endian 16-bit stereo sample pairs over a large nonzero window; many other `.pcm` files must remain rejected, so keep `.pcm` ADP handling extension-gated and guarded.
+
+- Raw `.g728` in the corpus has no leading magic. Local ffprobe reports `g728`, 8 kHz mono, 2 bits per sample, and duration as `file_size * 8 / 16000`; keep it extension-gated.
+
+- ACT voice fixtures are RIFF/WAVE-looking files, but ffprobe lets the `.act` extension override the PCM-looking header and reports `act`/`g729`. The observed duration comes from the declared `data` chunk size divided by 8000, even when that declared size exceeds the available file bytes.
+
+- CDG files are fixed 24-byte packet streams with no normal magic. For the observed `.cdg`, ffprobe reports `cdg`/`cdgraphics`, 300x216, frame rate 300/1, and duration as `packet_count / 300`; keep CDG extension-gated.
+
+- Pictor `.PIC` starts with little-endian `0x1234`, followed by width and height at offsets 2 and 4. V.Flash PTX starts with a 44-byte header length and stores width/height at offsets 8 and 10 with a `44 + width * height * 2` payload shape. X-Face is extension-gated and reports a fixed 48x48 image; the observed file has a trailing NUL after printable text. The observed binary text `.BIN` case is exactly 12,800 bytes and ffprobe reports `bin`/`bintext` at 1280x640.
+
 - Several FATE WAV files use explicit non-PCM WAVEFORMATEX tags where header-only metadata is enough: `0x0031` is `gsm_ms` and uses the `fact` sample count; `0x0017` is OKI IMA ADPCM and duration is `data_size * 2 / sample_rate`; `0x0125` is Sanyo ADPCM and uses `fact`; `0x028e` is MSN Siren and duration is `data_size * 8 / sample_rate`; `0x0022` is TrueSpeech and uses `fact`; `0x0161` is WMA v2 and duration follows the available data bytes divided by byte rate. Local ffprobe also accepts PCM WAV with a wrong average-byte-rate field when block alignment and sample rate are otherwise usable.
 
 - GameCube RSD files have a real `RSD3`/`RSD4` header, unlike the separate RedSpark `.rsd` fixture. The observed `RADP` stream starts after a fixed 0x800-byte header and maps payload bytes to samples as `bytes * 4 / 5`; observed `GADP` uses the header data offset and maps payload bytes to samples as `bytes * 7 / 4`.

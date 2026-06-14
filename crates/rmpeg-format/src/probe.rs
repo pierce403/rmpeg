@@ -45,9 +45,11 @@ use crate::{
     nistsphere::{looks_like_nistsphere, parse_nistsphere},
     ogg::parse_ogg,
     osq::parse_osq,
+    pictor::{looks_like_pictor, parse_pictor},
     png::{looks_like_png, parse_png},
     pnm::{looks_like_binary_pnm, parse_pnm},
     psd::{looks_like_psd, parse_psd},
+    ptx::{looks_like_ptx, parse_ptx},
     qcp::{looks_like_qcp, parse_qcp},
     qoa::{looks_like_qoa, parse_qoa},
     realmedia::{looks_like_realmedia, parse_realmedia},
@@ -346,6 +348,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_xbm(bytes) {
         return parse_xbm(bytes);
+    }
+
+    if looks_like_pictor(bytes) {
+        return parse_pictor(bytes);
+    }
+
+    if looks_like_ptx(bytes) {
+        return parse_ptx(bytes);
     }
 
     if bytes.starts_with(b"OggS") {
