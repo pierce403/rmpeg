@@ -2,6 +2,7 @@ use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 
 use crate::{
     aac::{looks_like_adts_aac, parse_adts_aac},
+    ac3::{looks_like_raw_ac3_or_eac3, parse_raw_ac3_or_eac3},
     amr::parse_amr_nb,
     ape::parse_ape,
     asf::{looks_like_asf, parse_asf},
@@ -16,6 +17,7 @@ use crate::{
     dts::{looks_like_mpegts, looks_like_raw_dts, parse_dtshd, parse_mpegts_dts, parse_raw_dts},
     exr::{looks_like_exr, parse_exr},
     flac::parse_flac,
+    gif::{looks_like_gif, parse_gif},
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
     hevc::{looks_like_hevc_annex_b, parse_hevc_annex_b},
     ivf::parse_ivf,
@@ -75,6 +77,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_adts_aac(bytes) {
         return parse_adts_aac(bytes);
+    }
+
+    if looks_like_raw_ac3_or_eac3(bytes) {
+        return parse_raw_ac3_or_eac3(bytes);
     }
 
     if bytes.starts_with(b"ID3") || looks_like_mp3(bytes) {
@@ -155,6 +161,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_png(bytes) {
         return parse_png(bytes);
+    }
+
+    if looks_like_gif(bytes) {
+        return parse_gif(bytes);
     }
 
     if looks_like_bmp(bytes) {

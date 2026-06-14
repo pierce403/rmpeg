@@ -12,6 +12,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - sample rate, channels, bits per sample, data size, and duration estimate
 - a framemd5-like decode/hash path for PCM data
 - MP3 frame-header metadata probing
+- raw AC-3 and E-AC-3 metadata probing
 - raw AMR-NB metadata probing
 - FLAC STREAMINFO metadata probing
 - Monkey's Audio / APE metadata probing
@@ -24,6 +25,9 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - Bink video/audio metadata probing for observed FATE fixtures
 - Nintendo BFSTM/BRSTM stream metadata probing
 - extension-gated raw G.722 and G.723.1 audio metadata probing
+- extension-gated PP_BNK soundbank metadata probing
+- extension-gated CDXL video/audio metadata probing
+- GIF image/animation metadata probing
 - TTY/ANSI text demuxer metadata for observed ffprobe-accepted text reports
 - IVF metadata probing for VP8, VP9, and AV1 video
 - raw Annex B H.264 SPS metadata probing
@@ -50,7 +54,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - WavPack metadata probing from raw blocks and Matroska tracks
 - BRender PIX image metadata probing
 
-Compressed decode is not implemented yet. MP3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, WavPack, WMA Lossless, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, G.722, G.723.1, BFSTM/BRSTM, H.264, HEVC, VVC, DNxHD/DNxHR, DNXUC, Hap, ProRes, QuickTime Animation, DV, VP8, VP9, AV1, Matroska/WebM, subtitles, DDS, PNG/APNG, BMP, BRender PIX, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, AC-3, E-AC-3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, WavPack, WMA Lossless, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, G.722, G.723.1, PP_BNK, CDXL, BFSTM/BRSTM, H.264, HEVC, VVC, DNxHD/DNxHR, DNXUC, Hap, ProRes, QuickTime Animation, DV, VP8, VP9, AV1, Matroska/WebM, subtitles, DDS, GIF, PNG/APNG, BMP, BRender PIX, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
@@ -58,7 +62,7 @@ FFmpeg is used as the behavior oracle. This project does not copy or mechanicall
 
 Phase 1 is compatibility: make rmpeg successfully inspect and eventually decode as much of the upstream FFmpeg sample media set as possible, with the site reporting real progress from `site/data/upstream-samples.json`.
 
-Current Phase 1 strict corpus progress is 1639 of 2178 FFmpeg-accepted samples, or 75.253%, on the local upstream sample report.
+Current Phase 1 strict corpus progress is 1664 of 2178 FFmpeg-accepted samples, or 76.400%, on the local upstream sample report.
 
 Phase 2 is optimization. Once Phase 1 is no longer the main blocker, the site should show which older FFmpeg codec paths rmpeg is faster than, using the benchmark JSON instead of hand-written claims.
 

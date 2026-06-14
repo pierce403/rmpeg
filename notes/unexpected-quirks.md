@@ -125,3 +125,13 @@
 - AVI remains a metadata-rich shortcut when `strh`/`strf` are complete. Many FATE fixtures move from rejection to exact probe matches by mapping the observed compression fourcc only: examples include `CSCD` -> `cscd`, `KMVC` -> `kmvc`, `CVID` -> `cinepak`, `VP60` -> `vp6`, and `ZMBV` -> `zmbv`. This still does not decode any of those payloads.
 
 - Partial AVI files often keep original `dwLength` values even when the media payload is truncated. The fourcc map improves full or metadata-complete files, but partial captures for Fraps, TechSmith, Lagarith, and several screen codecs still fail honestly on duration until packet-aware duration capping is codec/container specific.
+
+- GIF duration is not just the number of image separators multiplied by a fixed frame rate. FFprobe sums Graphic Control Extension delays when any delay is nonzero, but falls back to 10 fps when every parsed frame has a zero delay. Count image blocks with a real GIF sub-block parser so compressed payload bytes do not look like false frame markers.
+
+- Raw AC-3 sample durations in the corpus mirror FFprobe's bitrate estimate over the available file size, including truncated tails, rather than only counting complete 1536-sample frames. E-AC-3 behaves the same for the observed files, and one `.eac3` sample has a 352-byte prefix before the first sync word, so sync scanning is extension-gated instead of enabled globally.
+
+- The `eac3/the_great_wall_7.1.eac3` fixture still fails honestly. Its first sync-shaped header can be interpreted as AC-3-like metadata, but ffprobe reports E-AC-3 7.1 at half that duration. Do not special-case it by filename; it needs a fuller E-AC-3 substream parser.
+
+- PP_BNK has no reliable leading magic number, so `rmpeg-probe` only enables it by observed FATE extensions such as `.5c`, `.11c`, and `.44c`. The header's data-size field maps to duration as `data_size * 2 / sample_rate`, while a second 20-byte descriptor after the first data block can create another mono stream even when the second stream payload is truncated.
+
+- CDXL frame size, width, height, and per-frame audio sample count are fixed near the beginning of each frame. FFprobe reports CDXL video duration as missing, which normalizes to 0.0 in the harness, while audio duration is `floor(file_size / frame_size) * audio_samples_per_frame / 11025`.
