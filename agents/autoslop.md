@@ -48,7 +48,7 @@ Rules:
 
 Good current targets:
 
-- WavPack or DTS header metadata clusters.
+- DTS header metadata clusters.
 - AAC and MP4 metadata correctness, especially `esds` edge cases.
 - Remaining image metadata clusters with stable headers.
 - One skipped top-table decode/hash row, if it can be implemented honestly.

@@ -221,6 +221,7 @@ fn codec_name(codec_id: &str) -> Option<&'static str> {
         "A_VORBIS" => Some("vorbis"),
         "A_AAC" => Some("aac"),
         "A_FLAC" => Some("flac"),
+        "A_WAVPACK4" | "A_WAVPACK" => Some("wavpack"),
         "A_MPEG/L3" => Some("mp3"),
         "A_PCM/INT/LIT" => Some("pcm_s16le"),
         _ => None,

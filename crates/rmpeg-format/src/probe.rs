@@ -24,6 +24,7 @@ use crate::{
     tiff::{looks_like_tiff, parse_tiff},
     vvc::{looks_like_vvc_annex_b, parse_vvc_annex_b},
     wav::parse_wav,
+    wavpack::parse_wavpack,
     webp::{looks_like_webp, parse_webp},
 };
 
@@ -53,6 +54,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"fLaC") {
         return parse_flac(bytes);
+    }
+
+    if bytes.starts_with(b"wvpk") {
+        return parse_wavpack(bytes);
     }
 
     if looks_like_webp(bytes) {

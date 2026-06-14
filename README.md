@@ -32,8 +32,9 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - conservative Matroska/WebM track metadata probing
 - raw HEVC Annex B bitstream metadata probing
 - narrow raw VVC Annex B bitstream metadata probing
+- WavPack metadata probing from raw blocks and Matroska tracks
 
-Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, H.264, HEVC, VVC, VP8, VP9, AV1, Matroska/WebM, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, WavPack, H.264, HEVC, VVC, VP8, VP9, AV1, Matroska/WebM, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
