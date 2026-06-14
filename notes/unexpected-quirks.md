@@ -149,3 +149,15 @@
 - The current JPEG XL probe is deliberately narrow. It recognizes the observed raw codestream prefixes and boxed `jxlc`/`jxlp` wrappers, including extended-size boxes, but it is not a general JPEG XL size-header parser yet.
 
 - SMJPEG stores a millisecond duration in its header before `_SND` and `_VID` descriptors. Bethesda VID and VMD fixtures report no stream duration in ffprobe, so returning 0.0 normalized duration is correct for the current harness.
+
+## 2026-06-14
+
+- DPX dimensions are fixed far into the image header, not near the magic. The observed corpus files use both `SDPX` big-endian and `XPDS` little-endian headers, with width and height at offsets 772 and 776 in that byte order.
+
+- AEA/ATRAC1 has a small fixed header followed by codec payload. FFprobe reports 44.1 kHz stereo `atrac1`, and the observed duration matches `(file_size - 2048) / 36500`, not a decoded frame count.
+
+- ATRAC3-in-WAV uses WAVE format tag `0x0270`. The FATE WAV fixtures can have a data chunk whose declared size extends beyond the available sample, so metadata duration should use the available data bytes divided by the WAVEFORMATEX byte rate.
+
+- ASF MSS2 video uses the normal ASF Stream Properties object, but the video type-specific payload has an 11-byte prefix before the BITMAPINFOHEADER. The `MSS2` compression fourcc starts at payload offset 27, not at a naturally aligned DWORD offset. WMAPro in the same container reports compressed audio bit depth as 0 even when the WAVEFORMATEX field says 24.
+
+- RealMedia `.RMF` stream metadata lives in `MDPR` chunks. The type-specific payloads carry observable codec tags such as `VIDORV20`, `sipr`, `cook`, `28_8`, and `lpcJ`; old standalone `.ra` files and RALF-in-RMVB remain separate unsupported cases.

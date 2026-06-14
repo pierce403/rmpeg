@@ -2,7 +2,7 @@ use std::{env, fs, process};
 
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
 use rmpeg_format::{
-    parse_cdxl, parse_jxl, parse_pp_bnk, parse_raw_ac3_or_eac3_scanning, parse_raw_g722,
+    parse_aea, parse_cdxl, parse_jxl, parse_pp_bnk, parse_raw_ac3_or_eac3_scanning, parse_raw_g722,
     parse_raw_g723_1, parse_vmd, probe,
 };
 
@@ -46,6 +46,7 @@ fn probe_raw_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
 
     match extension.to_ascii_lowercase().as_str() {
         "ac3" | "eac3" => parse_raw_ac3_or_eac3_scanning(input),
+        "aea" => parse_aea(input),
         "cdxl" => parse_cdxl(input),
         "jxl" => parse_jxl(input),
         "vmd" => parse_vmd(input),

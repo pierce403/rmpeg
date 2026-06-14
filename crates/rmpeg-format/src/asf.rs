@@ -12,6 +12,9 @@ const STREAM_PROPERTIES_GUID: [u8; 16] = [
 const AUDIO_MEDIA_GUID: [u8; 16] = [
     0x40, 0x9e, 0x69, 0xf8, 0x4d, 0x5b, 0xcf, 0x11, 0xa8, 0xfd, 0x00, 0x80, 0x5f, 0x5c, 0x44, 0x2b,
 ];
+const VIDEO_MEDIA_GUID: [u8; 16] = [
+    0xc0, 0xef, 0x19, 0xbc, 0x4d, 0x5b, 0xcf, 0x11, 0xa8, 0xfd, 0x00, 0x80, 0x5f, 0x5c, 0x44, 0x2b,
+];
 
 #[derive(Debug, Default)]
 struct AsfMetadata {
@@ -24,6 +27,22 @@ struct AsfMetadata {
     channels: Option<u16>,
     bits_per_sample: Option<u16>,
     average_bytes_per_second: Option<u32>,
+    streams: Vec<AsfStream>,
+}
+
+#[derive(Debug, Clone)]
+enum AsfStream {
+    Audio {
+        codec_name: &'static str,
+        sample_rate: u32,
+        channels: u16,
+        bits_per_sample: u16,
+    },
+    Video {
+        codec_name: &'static str,
+        width: u32,
+        height: u32,
+    },
 }
 
 pub fn parse_asf(bytes: &[u8]) -> Result<ProbeDocument> {
@@ -74,30 +93,49 @@ pub fn parse_asf(bytes: &[u8]) -> Result<ProbeDocument> {
     }
 
     let duration_seconds = asf_duration_seconds(bytes, &metadata);
-    let bits_per_sample = if metadata
+    if metadata.streams.is_empty() {
+        return Err(RmpegError::InvalidData(
+            "ASF file has no supported audio/video stream".to_string(),
+        ));
+    }
+    let truncated = metadata
         .declared_file_size
-        .is_some_and(|declared| (bytes.len() as u64) < declared)
-    {
-        0
-    } else {
-        metadata.bits_per_sample.unwrap_or(0)
-    };
+        .is_some_and(|declared| (bytes.len() as u64) < declared);
+    let streams = metadata
+        .streams
+        .iter()
+        .enumerate()
+        .map(|(index, stream)| match stream {
+            AsfStream::Audio {
+                codec_name,
+                sample_rate,
+                channels,
+                bits_per_sample,
+            } => StreamMetadata::audio(
+                index,
+                *codec_name,
+                *sample_rate,
+                *channels,
+                if truncated { 0 } else { *bits_per_sample },
+                duration_seconds,
+            ),
+            AsfStream::Video {
+                codec_name,
+                width,
+                height,
+            } => StreamMetadata::video(
+                index,
+                *codec_name,
+                *width,
+                *height,
+                Some(duration_seconds),
+                None,
+            ),
+        })
+        .collect();
     Ok(ProbeDocument {
         format: "asf".to_string(),
-        streams: vec![StreamMetadata::audio(
-            0,
-            metadata.codec_name.ok_or_else(|| {
-                RmpegError::InvalidData("ASF file has no supported audio stream".to_string())
-            })?,
-            metadata.sample_rate.ok_or_else(|| {
-                RmpegError::InvalidData("ASF audio stream has no sample rate".to_string())
-            })?,
-            metadata.channels.ok_or_else(|| {
-                RmpegError::InvalidData("ASF audio stream has no channel count".to_string())
-            })?,
-            bits_per_sample,
-            duration_seconds,
-        )],
+        streams,
     })
 }
 
@@ -125,29 +163,84 @@ fn parse_stream_properties(data: &[u8], metadata: &mut AsfMetadata) -> Result<()
             remaining: data.len(),
         });
     }
-    if data[0..16] != AUDIO_MEDIA_GUID {
-        return Ok(());
-    }
     let type_len = usize::try_from(read_u32_le(data, 40)?)
         .map_err(|_| RmpegError::InvalidData("ASF stream data is too large".to_string()))?;
-    let wave_start = 54;
-    let wave_end = wave_start + type_len;
-    if wave_end > data.len() || type_len < 16 {
+    let type_start = 54;
+    let type_end = type_start + type_len;
+    if type_end > data.len() {
         return Err(RmpegError::UnexpectedEof {
-            needed: wave_end,
+            needed: type_end,
             remaining: data.len(),
         });
     }
-    let wave = &data[wave_start..wave_end];
+    if data[0..16] == AUDIO_MEDIA_GUID {
+        parse_audio_stream_data(&data[type_start..type_end], metadata)?;
+    } else if data[0..16] == VIDEO_MEDIA_GUID {
+        parse_video_stream_data(&data[type_start..type_end], metadata)?;
+    }
+    Ok(())
+}
+
+fn parse_audio_stream_data(wave: &[u8], metadata: &mut AsfMetadata) -> Result<()> {
+    if wave.len() < 16 {
+        return Err(RmpegError::UnexpectedEof {
+            needed: 16,
+            remaining: wave.len(),
+        });
+    }
     let format_tag = read_u16_le(wave, 0)?;
-    metadata.codec_name = match format_tag {
+    let codec_name = match format_tag {
         0x0163 => Some("wmalossless"),
+        0x0162 => Some("wmapro"),
+        0x0161 => Some("wmav2"),
         _ => None,
     };
-    metadata.channels = Some(read_u16_le(wave, 2)?);
-    metadata.sample_rate = Some(read_u32_le(wave, 4)?);
+    let Some(codec_name) = codec_name else {
+        return Ok(());
+    };
+    let channels = read_u16_le(wave, 2)?;
+    let sample_rate = read_u32_le(wave, 4)?;
     metadata.average_bytes_per_second = Some(read_u32_le(wave, 8)?);
-    metadata.bits_per_sample = Some(read_u16_le(wave, 14)?);
+    let header_bits_per_sample = read_u16_le(wave, 14)?;
+    let bits_per_sample = if codec_name == "wmalossless" {
+        header_bits_per_sample
+    } else {
+        0
+    };
+    metadata.codec_name = Some(codec_name);
+    metadata.channels = Some(channels);
+    metadata.sample_rate = Some(sample_rate);
+    metadata.bits_per_sample = Some(bits_per_sample);
+    metadata.streams.push(AsfStream::Audio {
+        codec_name,
+        sample_rate,
+        channels,
+        bits_per_sample,
+    });
+    Ok(())
+}
+
+fn parse_video_stream_data(video: &[u8], metadata: &mut AsfMetadata) -> Result<()> {
+    if video.len() < 31 {
+        return Err(RmpegError::UnexpectedEof {
+            needed: 31,
+            remaining: video.len(),
+        });
+    }
+    let codec_name = match &video[27..31] {
+        b"MSS2" => "mss2",
+        _ => return Ok(()),
+    };
+    let width = read_u32_le(video, 0)?;
+    let height = read_u32_le(video, 4)?;
+    if width == 0 || height == 0 {
+        return Ok(());
+    }
+    metadata.streams.push(AsfStream::Video {
+        codec_name,
+        width,
+        height,
+    });
     Ok(())
 }
 
@@ -220,4 +313,60 @@ fn read_u64_le(bytes: &[u8], offset: usize) -> Result<u64> {
         bytes[offset + 6],
         bytes[offset + 7],
     ]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_observed_mss2_video_payload() {
+        let mut metadata = AsfMetadata::default();
+        let mut payload = vec![0; 64];
+        payload[0..4].copy_from_slice(&320u32.to_le_bytes());
+        payload[4..8].copy_from_slice(&240u32.to_le_bytes());
+        payload[27..31].copy_from_slice(b"MSS2");
+
+        parse_video_stream_data(&payload, &mut metadata).unwrap();
+
+        match metadata.streams.as_slice() {
+            [AsfStream::Video {
+                codec_name,
+                width,
+                height,
+            }] => {
+                assert_eq!(*codec_name, "mss2");
+                assert_eq!(*width, 320);
+                assert_eq!(*height, 240);
+            }
+            streams => panic!("unexpected streams: {streams:?}"),
+        }
+    }
+
+    #[test]
+    fn reports_zero_bits_for_wmapro() {
+        let mut metadata = AsfMetadata::default();
+        let wave = [
+            0x62, 0x01, // WMAPro
+            0x02, 0x00, // channels
+            0x44, 0xac, 0x00, 0x00, // sample rate
+            0x85, 0x3e, 0x00, 0x00, // byte rate
+            0x9d, 0x0b, // block align
+            0x18, 0x00, // header bits per sample
+        ];
+
+        parse_audio_stream_data(&wave, &mut metadata).unwrap();
+
+        match metadata.streams.as_slice() {
+            [AsfStream::Audio {
+                codec_name,
+                bits_per_sample,
+                ..
+            }] => {
+                assert_eq!(*codec_name, "wmapro");
+                assert_eq!(*bits_per_sample, 0);
+            }
+            streams => panic!("unexpected streams: {streams:?}"),
+        }
+    }
 }

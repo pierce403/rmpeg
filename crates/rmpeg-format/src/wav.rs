@@ -124,6 +124,14 @@ fn validate_wav_format(fmt: WavFmt) -> Result<()> {
         }
         return Ok(());
     }
+    if fmt.audio_format == 0x0270 {
+        if fmt.channels == 0 || fmt.sample_rate == 0 || fmt.byte_rate == 0 {
+            return Err(RmpegError::Unsupported(
+                "ATRAC3 WAV layout is not supported".to_string(),
+            ));
+        }
+        return Ok(());
+    }
     if fmt.audio_format != 1 {
         return Err(RmpegError::Unsupported(format!(
             "WAV audio format {} is not PCM",
@@ -163,6 +171,9 @@ fn duration_seconds(fmt: WavFmt, data_size: usize) -> Result<f64> {
     if fmt.audio_format == 0x0200 {
         return Ok(data_size as f64 * 2.0 / fmt.sample_rate as f64);
     }
+    if fmt.audio_format == 0x0270 {
+        return Ok(data_size as f64 / fmt.byte_rate as f64);
+    }
     let bytes_per_second = u32::from(fmt.block_align)
         .checked_mul(fmt.sample_rate)
         .ok_or_else(|| RmpegError::InvalidData("WAV byte rate overflow".to_string()))?;
@@ -176,6 +187,9 @@ fn duration_seconds(fmt: WavFmt, data_size: usize) -> Result<f64> {
 fn codec_name(fmt: WavFmt) -> Result<&'static str> {
     if fmt.audio_format == 0x0200 {
         return Ok("adpcm_ct");
+    }
+    if fmt.audio_format == 0x0270 {
+        return Ok("atrac3");
     }
     match fmt.bits_per_sample {
         8 => Ok("pcm_u8"),
@@ -330,5 +344,29 @@ mod tests {
         assert_eq!(wav.metadata.codec_name, "adpcm_ct");
         assert_eq!(wav.data_size, 10);
         assert_eq!(wav.metadata.duration_seconds, 20.0 / 44_100.0);
+    }
+
+    #[test]
+    fn parses_truncated_atrac3_data_chunk() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&0x1000_u32.to_le_bytes());
+        bytes.extend_from_slice(b"WAVEfmt ");
+        bytes.extend_from_slice(&32_u32.to_le_bytes());
+        bytes.extend_from_slice(&0x0270_u16.to_le_bytes());
+        bytes.extend_from_slice(&2_u16.to_le_bytes());
+        bytes.extend_from_slice(&44_100_u32.to_le_bytes());
+        bytes.extend_from_slice(&10_000_u32.to_le_bytes());
+        bytes.extend_from_slice(&0x130_u16.to_le_bytes());
+        bytes.extend_from_slice(&0_u16.to_le_bytes());
+        bytes.extend_from_slice(&[0; 16]);
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&1000_u32.to_le_bytes());
+        bytes.extend_from_slice(&[0; 20]);
+
+        let wav = parse_wav(&bytes).expect("valid truncated atrac3 wav");
+        assert_eq!(wav.metadata.codec_name, "atrac3");
+        assert_eq!(wav.data_size, 20);
+        assert_eq!(wav.metadata.duration_seconds, 0.002);
     }
 }

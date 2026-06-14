@@ -16,6 +16,7 @@ use crate::{
     dds::parse_dds,
     dfa::{looks_like_dfa, parse_dfa},
     dnxhd::{looks_like_raw_dnxhd, parse_raw_dnxhd},
+    dpx::{looks_like_dpx, parse_dpx},
     dts::{looks_like_mpegts, looks_like_raw_dts, parse_dtshd, parse_mpegts_dts, parse_raw_dts},
     exr::{looks_like_exr, parse_exr},
     fits::{looks_like_fits, parse_fits},
@@ -38,6 +39,7 @@ use crate::{
     png::{looks_like_png, parse_png},
     pnm::{looks_like_binary_pnm, parse_pnm},
     psd::{looks_like_psd, parse_psd},
+    realmedia::{looks_like_realmedia, parse_realmedia},
     sgi::{looks_like_sgi, parse_sgi},
     smjpeg::{looks_like_smjpeg, parse_smjpeg},
     subtitle::{looks_like_subtitle, parse_subtitle},
@@ -84,6 +86,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_asf(bytes) {
         return parse_asf(bytes);
+    }
+
+    if looks_like_realmedia(bytes) {
+        return parse_realmedia(bytes);
     }
 
     if looks_like_adts_aac(bytes) {
@@ -184,6 +190,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_exr(bytes) {
         return parse_exr(bytes);
+    }
+
+    if looks_like_dpx(bytes) {
+        return parse_dpx(bytes);
     }
 
     if looks_like_png(bytes) {
