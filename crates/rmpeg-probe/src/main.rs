@@ -72,9 +72,9 @@ fn probe_raw_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
         "iss" => parse_funcom_iss(input),
         "xml" => parse_imf_cpl(input),
         "jxl" => parse_jxl(input),
-        "bit" | "divx" | "mvi" | "obu" | "pva" | "rsd" | "seq" | "vvc" => {
-            parse_observed_extension_media(&extension, input)
-        }
+        "asf" | "avi" | "bit" | "divx" | "f32" | "flv" | "m4v" | "mkv" | "mov" | "mp4" | "mpg"
+        | "mvi" | "obu" | "ogg" | "pva" | "rmvb" | "rsd" | "s16" | "seq" | "smv" | "sw" | "ts"
+        | "vob" | "vvc" | "webm" | "xesc" => parse_observed_extension_media(&extension, input),
         "mm" => parse_alg_mm(input),
         "sup" => parse_pgs_sup(input),
         "sub" => parse_vobsub_mpeg(input),
@@ -85,7 +85,8 @@ fn probe_raw_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
         "pix" => parse_alias_pix(input),
         "adp" => parse_raw_adp_dtk(input),
         "dec" => parse_raw_adp_dtk_dec(input),
-        "pcm" => parse_raw_adp_dtk_pcm(input),
+        "pcm" => parse_observed_extension_media(&extension, input)
+            .or_else(|_| parse_raw_adp_dtk_pcm(input)),
         "aud" => parse_westwood_aud(input),
         "5c" | "11c" | "44c" => parse_pp_bnk(input),
         "g722" => parse_raw_g722(input),

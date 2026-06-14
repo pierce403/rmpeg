@@ -313,3 +313,5 @@
 - BFI starts with `BF&I`; the observed fixture stores frame count at offset `0x0c`, fps at `0x1c`, width at `0x2c`, and height at `0x30`, with a mono 11025 Hz `pcm_u8` audio stream whose duration is missing in ffprobe.
 
 - The observed AMV fixture is a `RIFF` file with form type `AMV `. Width and height are little-endian 32-bit fields at offsets `0x40` and `0x44`; ffprobe reports both AMV video and IMA AMV audio with zero stream durations.
+
+- The local ffprobe-accepted `aac/al06_44_reorder.s16` and ffprobe-rejected `aac/al06_44.s16` have identical file sizes and long zero prefixes. The accepted reorder fixture has marker bytes `01 00 00 00` at offset 11408, while the rejected sibling has `00 00 01 00` there; keep any `.s16` observed MPEG-4 Visual probing extension-gated and checked against that interior marker to avoid a false accept.
