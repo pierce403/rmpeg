@@ -18,7 +18,7 @@ pub fn parse_flv(bytes: &[u8]) -> Result<ProbeDocument> {
 
     let mut streams = Vec::new();
     let mut saw_h264 = false;
-    let mut saw_aac = false;
+    let mut saw_audio = false;
     while pos + 11 <= bytes.len() {
         let tag_type = bytes[pos];
         let data_size = read_u24_be(bytes, pos + 1)? as usize;
@@ -31,10 +31,10 @@ pub fn parse_flv(bytes: &[u8]) -> Result<ProbeDocument> {
         }
         let data = &bytes[data_start..data_end];
         match tag_type {
-            8 if !saw_aac => {
-                if let Some(stream) = parse_aac_tag(data, streams.len())? {
+            8 if !saw_audio => {
+                if let Some(stream) = parse_audio_tag(data, streams.len())? {
                     streams.push(stream);
-                    saw_aac = true;
+                    saw_audio = true;
                 }
             }
             9 if !saw_h264 => {
@@ -63,6 +63,35 @@ pub fn parse_flv(bytes: &[u8]) -> Result<ProbeDocument> {
 
 pub fn looks_like_flv(bytes: &[u8]) -> bool {
     bytes.len() >= 9 && bytes.starts_with(b"FLV") && bytes[3] == 1
+}
+
+fn parse_audio_tag(data: &[u8], index: usize) -> Result<Option<StreamMetadata>> {
+    if data.is_empty() {
+        return Ok(None);
+    }
+    let sound_format = data[0] >> 4;
+    if sound_format == 10 {
+        return parse_aac_tag(data, index);
+    }
+    if sound_format == 6 {
+        let sample_rate = match (data[0] >> 2) & 0x03 {
+            0 => 5_500,
+            1 => 11_025,
+            2 => 22_050,
+            3 => 44_100,
+            _ => unreachable!(),
+        };
+        let channels = if data[0] & 0x01 != 0 { 2 } else { 1 };
+        return Ok(Some(StreamMetadata::audio(
+            index,
+            "nellymoser",
+            sample_rate,
+            channels,
+            0,
+            0.0,
+        )));
+    }
+    Ok(None)
 }
 
 fn parse_aac_tag(data: &[u8], index: usize) -> Result<Option<StreamMetadata>> {
@@ -196,5 +225,17 @@ mod tests {
         assert_eq!(stream.codec_name, "aac");
         assert_eq!(stream.sample_rate, Some(44_100));
         assert_eq!(stream.channels, Some(2));
+    }
+
+    #[test]
+    fn parses_nellymoser_audio_tag_metadata() {
+        let stream = parse_audio_tag(&[0x6a, 0xbe, 0x5b], 0)
+            .expect("valid tag")
+            .expect("nelly stream");
+
+        assert_eq!(stream.codec_name, "nellymoser");
+        assert_eq!(stream.sample_rate, Some(22_050));
+        assert_eq!(stream.channels, Some(1));
+        assert_eq!(stream.bits_per_sample, Some(0));
     }
 }

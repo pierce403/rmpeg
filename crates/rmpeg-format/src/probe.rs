@@ -20,12 +20,14 @@ use crate::{
     dnxhd::{looks_like_raw_dnxhd, parse_raw_dnxhd},
     dpx::{looks_like_dpx, parse_dpx},
     dts::{looks_like_raw_dts, parse_dtshd, parse_mpegts_dts, parse_raw_dts},
+    dxa::{looks_like_dxa, parse_dxa},
     ea::{looks_like_ea, parse_ea},
     exr::{looks_like_exr, parse_exr},
     fits::{looks_like_fits, parse_fits},
     flac::parse_flac,
     flic::{looks_like_flic, parse_flic},
     flv::{looks_like_flv, parse_flv},
+    gdv::{looks_like_gdv, parse_gdv},
     gif::{looks_like_gif, parse_gif},
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
     hevc::{looks_like_hevc_annex_b, parse_hevc_annex_b},
@@ -34,6 +36,7 @@ use crate::{
     jpeg::{looks_like_jpeg, parse_jpeg},
     jpeg2000::{looks_like_jpeg2000_codestream, parse_jpeg2000_codestream},
     jxl::{looks_like_jxl, parse_jxl},
+    kvag::{looks_like_kvag, parse_kvag},
     matroska::{looks_like_matroska, parse_matroska},
     mlp::{looks_like_mlp_or_truehd, parse_mlp_or_truehd},
     mp3::parse_mp3,
@@ -53,6 +56,7 @@ use crate::{
     qcp::{looks_like_qcp, parse_qcp},
     qoa::{looks_like_qoa, parse_qoa},
     realmedia::{looks_like_realmedia, parse_realmedia},
+    rpl::{looks_like_rpl, parse_rpl},
     rsd::{looks_like_rsd, parse_rsd},
     sgi::{looks_like_sgi, parse_sgi},
     smjpeg::{looks_like_smjpeg, parse_smjpeg},
@@ -72,6 +76,7 @@ use crate::{
     wavpack::parse_wavpack,
     webp::{looks_like_webp, parse_webp},
     xbm::{looks_like_xbm, parse_xbm},
+    xwma::{looks_like_xwma, parse_xwma},
 };
 
 pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
@@ -96,6 +101,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_w64(bytes) {
         return parse_w64(bytes);
+    }
+
+    if looks_like_xwma(bytes) {
+        return parse_xwma(bytes);
     }
 
     if looks_like_avi(bytes) {
@@ -128,6 +137,22 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_ea(bytes) {
         return parse_ea(bytes);
+    }
+
+    if looks_like_dxa(bytes) {
+        return parse_dxa(bytes);
+    }
+
+    if looks_like_gdv(bytes) {
+        return parse_gdv(bytes);
+    }
+
+    if looks_like_kvag(bytes) {
+        return parse_kvag(bytes);
+    }
+
+    if looks_like_rpl(bytes) {
+        return parse_rpl(bytes);
     }
 
     if looks_like_adts_aac(bytes) {

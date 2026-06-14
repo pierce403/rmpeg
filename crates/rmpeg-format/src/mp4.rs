@@ -965,29 +965,41 @@ fn codec_name(coding: [u8; 4]) -> &'static str {
         b"CFHD" => "cfhd",
         b"DXD3" | b"DXDI" => "dxv",
         b"8BPS" => "8bps",
+        b"SVQ1" => "svq1",
+        b"SVQ3" | [b'S', b'V', b'Q', 0x18] => "svq3",
+        b"VP6A" => "vp6a",
         b"Hap1" | b"Hap5" | b"HapA" | b"HapM" | b"HapY" => "hap",
         b"MAC3" => "mace3",
         b"MAC6" => "mace6",
         b"QDM2" => "qdm2",
+        b"agsm" => "gsm",
         b"avc1" | b"avc3" => "h264",
         b"ap4h" | b"ap4x" | b"apch" | b"apcn" | b"apco" | b"apcs" => "prores",
-        b"dvc " | b"dvcp" | b"dvh5" | b"dvh6" | b"dvhp" | b"dvhq" | b"dvh1" => "dvvideo",
+        b"cvid" => "cinepak",
+        b"dtPA" => "media100",
+        b"dvc " | b"dvcp" | b"dvh5" | b"dvh6" | b"dvhp" | b"dvhq" | b"dvh1" | b"dvh2" => "dvvideo",
         b"mp4a" => "aac",
         b"mp4v" => "mpeg4",
         b"hvc1" | b"hev1" => "hevc",
         b"icod" => "aic",
         b"ima4" => "adpcm_ima_qt",
         b"in24" => "pcm_s24le",
+        b"mjpb" => "mjpegb",
         b"msVo" => "vorbis",
         b"mp3 " => "mp3",
+        b"pxlt" => "pixlet",
+        b"qdrw" => "qdraw",
         b"raw " => "pcm_u8",
+        b"rpza" => "rpza",
         b"rle " => "qtrle",
         b"samr" => "amr_nb",
         b"sawb" => "amr_wb",
+        b"smc " => "smc",
         b"sowt" => "pcm_s16le",
         b"twos" => "pcm_s16be",
         b"alaw" => "pcm_alaw",
         b"ulaw" => "pcm_mulaw",
+        b"v410" => "rawvideo",
         [b'm', b's', 0, 2] => "adpcm_ms",
         [b'm', b's', 0, 17] => "adpcm_ima_wav",
         _ => "unknown",
@@ -1076,5 +1088,19 @@ mod tests {
         assert_eq!(codec_name(*b"DXD3"), "dxv");
         assert_eq!(codec_name(*b"DXDI"), "dxv");
         assert_eq!(codec_name(*b"8BPS"), "8bps");
+        assert_eq!(codec_name(*b"SVQ1"), "svq1");
+        assert_eq!(codec_name(*b"SVQ3"), "svq3");
+        assert_eq!(codec_name([b'S', b'V', b'Q', 0x18]), "svq3");
+        assert_eq!(codec_name(*b"VP6A"), "vp6a");
+        assert_eq!(codec_name(*b"agsm"), "gsm");
+        assert_eq!(codec_name(*b"cvid"), "cinepak");
+        assert_eq!(codec_name(*b"dtPA"), "media100");
+        assert_eq!(codec_name(*b"dvh2"), "dvvideo");
+        assert_eq!(codec_name(*b"mjpb"), "mjpegb");
+        assert_eq!(codec_name(*b"pxlt"), "pixlet");
+        assert_eq!(codec_name(*b"qdrw"), "qdraw");
+        assert_eq!(codec_name(*b"rpza"), "rpza");
+        assert_eq!(codec_name(*b"smc "), "smc");
+        assert_eq!(codec_name(*b"v410"), "rawvideo");
     }
 }

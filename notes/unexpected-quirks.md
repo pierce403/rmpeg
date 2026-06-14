@@ -235,3 +235,21 @@
 - Several FATE WAV files use explicit non-PCM WAVEFORMATEX tags where header-only metadata is enough: `0x0031` is `gsm_ms` and uses the `fact` sample count; `0x0017` is OKI IMA ADPCM and duration is `data_size * 2 / sample_rate`; `0x0125` is Sanyo ADPCM and uses `fact`; `0x028e` is MSN Siren and duration is `data_size * 8 / sample_rate`; `0x0022` is TrueSpeech and uses `fact`; `0x0161` is WMA v2 and duration follows the available data bytes divided by byte rate. Local ffprobe also accepts PCM WAV with a wrong average-byte-rate field when block alignment and sample rate are otherwise usable.
 
 - GameCube RSD files have a real `RSD3`/`RSD4` header, unlike the separate RedSpark `.rsd` fixture. The observed `RADP` stream starts after a fixed 0x800-byte header and maps payload bytes to samples as `bytes * 4 / 5`; observed `GADP` uses the header data offset and maps payload bytes to samples as `bytes * 7 / 4`.
+
+- Additional QuickTime sample-entry fourccs are metadata-only wins when the existing MOV parser already has dimensions and durations: `SVQ1` -> `svq1`, `SVQ3` and the observed `SVQ\x18` variant -> `svq3`, `VP6A` -> `vp6a`, `cvid` -> `cinepak`, `dvh2` -> `dvvideo`, `agsm` -> `gsm`, `dtPA` -> `media100`, `mjpb` -> `mjpegb`, `pxlt` -> `pixlet`, `qdrw` -> `qdraw`, `rpza` -> `rpza`, `smc ` -> `smc`, and `v410` -> `rawvideo`. The compact `svq3/Vertical400kbit.sorenson3.mov` fixture still needs structural MOV parsing beyond a fourcc mapping.
+
+- DXA starts with `DEXA`. The observed header stores frame count as a big-endian 16-bit value at offset 5, signed frame-time ticks at offset 7 where negative values are used, width/height as big-endian 16-bit values at offsets 11/13, and flag bit `0x40` halves the reported height. An optional embedded RIFF/WAVE after a `WAVE` marker supplies `adpcm_ms` audio metadata, whose stream duration matches the video duration.
+
+- GDV starts with bytes `94 19 11 29`. The observed files store frame count at offset 6, fps at offset 8, optional audio tag at offset 10, sample rate at offset 12, channel count at offset 19, and dimensions at offsets 20/22, all little-endian where wider than one byte. Audio duration is missing in ffprobe and normalizes to 0.0.
+
+- KVAG starts with `KVAG`, stores payload byte count at offset 4, sample rate at offset 8, and a channel flag at offset 12 where `0` means mono and `1` means stereo. FFprobe reports `adpcm_ima_ssi` with 4 bits per sample and duration as `data_size * 2 / channels / sample_rate`.
+
+- RPL headers are ASCII after `ARMovie\n`. For the observed Escape fixtures, video format `124` maps to `escape124` and `130` maps to `escape130`; video duration is `(number_of_chunks + 1) * frames_per_chunk / fps`, while the PCM audio stream reports no duration and normalizes to 0.0.
+
+- EA MAD files start with `MADk`; width and height are little-endian 16-bit values at offsets 16 and 18. Optional `SCHl` chunks carry compact tagged audio metadata: tag `0x84` length 3 is a 24-bit sample rate, tag `0x82` length 1 is channels, and tag `0x85` length 3 distinguishes the observed `adpcm_ea_r1` (`02 52 53`) and `pcm_s16le_planar` (`03 2f 63`) cases.
+
+- RIFF/XWMA uses form type `XWMA`, not `WAVE`. The observed fixture stores WMA v2 metadata in `fmt ` and decoded PCM byte totals in the `dpds` table; duration matches the last `dpds` value divided by `channels * 2 * sample_rate`.
+
+- Standalone QuickDraw PICT has weak leading bytes, so keep it extension-gated. The observed `.PCT` file stores the big-endian bounds rectangle immediately after the 16-bit declared size, and ffprobe reports `image2`/`qdraw` with the usual 0.04 second still-image duration.
+
+- FLV Nellymoser does not need an AAC-style sequence header. Ordinary audio tags with sound format `6` expose the stream; the observed tag byte `0x6a` maps to `nellymoser`, 22.05 kHz, mono, and no stream duration.
