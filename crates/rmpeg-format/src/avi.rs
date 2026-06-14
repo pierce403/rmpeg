@@ -221,15 +221,73 @@ fn audio_bits_per_sample(format: u16, bits_per_sample: Option<u16>) -> u16 {
 
 fn video_codec_name(fourcc: [u8; 4]) -> Option<&'static str> {
     match &fourcc {
+        [1, 0, 0, 0] => Some("msrle"),
+        b"012V" => Some("012v"),
+        b"AASC" => Some("aasc"),
+        b"AURA" => Some("aura"),
+        b"AUR2" => Some("aura2"),
+        b"AVRN" => Some("avrn"),
+        b"CFHD" => Some("cfhd"),
+        b"CHQX" => Some("hqx"),
+        b"CLJR" => Some("cljr"),
+        b"CLLC" => Some("cllc"),
+        b"CRAM" | b"MSVC" => Some("msvideo1"),
+        b"CSCD" => Some("cscd"),
+        b"CUVC" => Some("hq_hqa"),
+        b"CVID" => Some("cinepak"),
         b"DUCK" => Some("truemotion1"),
+        b"FFVH" => Some("ffvhuff"),
+        b"FICV" => Some("fic"),
+        b"FMVC" => Some("fmvc"),
         b"FPS1" => Some("fraps"),
+        b"FRWU" => Some("frwu"),
+        b"ISCC" => Some("rscc"),
+        b"IV32" => Some("indeo3"),
+        b"IV41" => Some("indeo4"),
+        b"IV50" => Some("indeo5"),
+        b"KGV1" => Some("kgv1"),
+        b"KMVC" => Some("kmvc"),
         b"LAGS" => Some("lagarith"),
+        b"LEAD" => Some("lead"),
+        b"LOCO" => Some("loco"),
+        b"LSCR" => Some("lscr"),
         b"MAGY" => Some("magicyuv"),
+        b"MJPG" => Some("mjpeg"),
+        b"MPG4" => Some("msmpeg4v1"),
+        b"MSZH" => Some("mszh"),
+        b"PNG1" => Some("png"),
+        b"Q1.0" => Some("qpeg"),
+        b"R210" => Some("r210"),
+        b"RSCC" => Some("rscc"),
+        b"RT21" => Some("indeo2"),
         b"SMV2" => Some("h264"),
+        b"SP54" => Some("sp5x"),
+        b"SPV1" => Some("screenpresso"),
         b"TM20" => Some("truemotion2"),
         b"TR20" => Some("truemotion2rt"),
+        b"TSCC" => Some("tscc"),
+        b"TSC2" => Some("tscc2"),
+        b"ULTI" => Some("ulti"),
         b"ULRG" | b"ULRA" | b"ULH0" | b"ULH2" | b"ULH4" | b"ULY0" | b"ULY2" => Some("utvideo"),
+        b"V210" => Some("v210"),
+        b"VBLE" => Some("vble"),
+        b"VCR1" => Some("vcr1"),
+        b"VCR2" => Some("mpeg2video"),
+        b"VIXL" => Some("vixl"),
+        b"VMNC" => Some("vmnc"),
+        b"VP31" => Some("vp3"),
+        b"VP40" => Some("vp4"),
+        b"VP50" => Some("vp5"),
+        b"VP60" => Some("vp6"),
+        b"VP70" => Some("vp7"),
+        b"VQC1" => Some("vqc"),
+        b"WNV1" => Some("wnv1"),
         b"XVID" | b"DIVX" | b"MP4V" => Some("mpeg4"),
+        b"XXAN" => Some("xan_wc4"),
+        b"XTOR" => Some("dxtory"),
+        b"ZEC0" | b"ZECO" => Some("zerocodec"),
+        b"ZLIB" => Some("zlib"),
+        b"ZMBV" => Some("zmbv"),
         _ => None,
     }
 }
@@ -420,6 +478,9 @@ mod tests {
     fn maps_observed_avi_game_codec_tags() {
         assert_eq!(video_codec_name(*b"FPS1"), Some("fraps"));
         assert_eq!(video_codec_name(*b"LAGS"), Some("lagarith"));
+        assert_eq!(video_codec_name(*b"CSCD"), Some("cscd"));
+        assert_eq!(video_codec_name(*b"VP60"), Some("vp6"));
+        assert_eq!(video_codec_name([1, 0, 0, 0]), Some("msrle"));
         assert_eq!(audio_codec_name(0x0001, Some(16)), Some("pcm_s16le"));
     }
 

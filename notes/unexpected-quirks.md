@@ -121,3 +121,7 @@
 - Raw G.722 and G.723.1 are extension-gated in `rmpeg-probe`, not byte-only probes. FFprobe accepts `.g722` and `.tco` samples with demuxer hints from the filename, but the byte patterns are too broad to enable globally in `probe(bytes)`.
 
 - Some MP3 conformance samples have leading padding before the first MP3 frame. `sin1k0db.bit` starts its first valid frame at byte 215, so dispatch needs a small consecutive-frame lookahead. Free-format MP3-like sync remains intentionally rejected because local ffprobe classifies `he_free.bit` as G.729, not MP3.
+
+- AVI remains a metadata-rich shortcut when `strh`/`strf` are complete. Many FATE fixtures move from rejection to exact probe matches by mapping the observed compression fourcc only: examples include `CSCD` -> `cscd`, `KMVC` -> `kmvc`, `CVID` -> `cinepak`, `VP60` -> `vp6`, and `ZMBV` -> `zmbv`. This still does not decode any of those payloads.
+
+- Partial AVI files often keep original `dwLength` values even when the media payload is truncated. The fourcc map improves full or metadata-complete files, but partial captures for Fraps, TechSmith, Lagarith, and several screen codecs still fail honestly on duration until packet-aware duration capping is codec/container specific.

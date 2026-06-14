@@ -42,6 +42,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - conservative Matroska/WebM track metadata probing, including Opus/Vorbis compressed audio metadata
 - MP4 AAC/ALS `esds` metadata probing for AudioSpecificConfig sample rate, channels, and ALS bit depth
 - narrow RIFF/AVI video metadata probing for UtVideo fixtures
+- broader RIFF/AVI codec-tag metadata probing for observed FATE video fourccs
 - narrow DTS metadata probing for DTS-HD, raw DTS, and DTS PES in MPEG-TS fixtures
 - content-signature subtitle text probing for common standalone subtitle formats
 - raw HEVC Annex B bitstream metadata probing
@@ -57,7 +58,7 @@ FFmpeg is used as the behavior oracle. This project does not copy or mechanicall
 
 Phase 1 is compatibility: make rmpeg successfully inspect and eventually decode as much of the upstream FFmpeg sample media set as possible, with the site reporting real progress from `site/data/upstream-samples.json`.
 
-Current Phase 1 strict corpus progress is 1584 of 2178 FFmpeg-accepted samples, or 72.727%, on the local upstream sample report.
+Current Phase 1 strict corpus progress is 1639 of 2178 FFmpeg-accepted samples, or 75.253%, on the local upstream sample report.
 
 Phase 2 is optimization. Once Phase 1 is no longer the main blocker, the site should show which older FFmpeg codec paths rmpeg is faster than, using the benchmark JSON instead of hand-written claims.
 
