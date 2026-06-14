@@ -34,6 +34,7 @@ use crate::{
     flac::parse_flac,
     flic::{looks_like_flic, parse_flic},
     flv::{looks_like_flv, parse_flv},
+    fourxm::{looks_like_fourxm, parse_fourxm},
     gdv::{looks_like_gdv, parse_gdv},
     gif::{looks_like_gif, parse_gif},
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
@@ -46,6 +47,11 @@ use crate::{
     jv::{looks_like_jv, parse_jv},
     jxl::{looks_like_jxl, parse_jxl},
     kvag::{looks_like_kvag, parse_kvag},
+    legacy_media::{
+        looks_like_argo_asf, looks_like_cryo_apc, looks_like_dirac, looks_like_dss,
+        looks_like_film_cpk, looks_like_iamf, looks_like_interplay_mve, parse_argo_asf,
+        parse_cryo_apc, parse_dirac, parse_dss, parse_film_cpk, parse_iamf, parse_interplay_mve,
+    },
     matroska::{looks_like_matroska, parse_matroska},
     mlp::{looks_like_mlp_or_truehd, parse_mlp_or_truehd},
     mlv::{looks_like_mlv, parse_mlv},
@@ -128,6 +134,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_avi(bytes);
     }
 
+    if looks_like_fourxm(bytes) {
+        return parse_fourxm(bytes);
+    }
+
     if looks_like_amv(bytes) {
         return parse_amv(bytes);
     }
@@ -152,6 +162,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_asf(bytes);
     }
 
+    if looks_like_argo_asf(bytes) {
+        return parse_argo_asf(bytes);
+    }
+
     if looks_like_realmedia(bytes) {
         return parse_realmedia(bytes);
     }
@@ -172,6 +186,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_dxa(bytes);
     }
 
+    if looks_like_film_cpk(bytes) {
+        return parse_film_cpk(bytes);
+    }
+
+    if looks_like_interplay_mve(bytes) {
+        return parse_interplay_mve(bytes);
+    }
+
     if looks_like_gdv(bytes) {
         return parse_gdv(bytes);
     }
@@ -182,6 +204,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_jv(bytes) {
         return parse_jv(bytes);
+    }
+
+    if looks_like_dirac(bytes) {
+        return parse_dirac(bytes);
     }
 
     if looks_like_cine(bytes) {
@@ -242,6 +268,18 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_musepack(bytes) {
         return parse_musepack(bytes);
+    }
+
+    if looks_like_cryo_apc(bytes) {
+        return parse_cryo_apc(bytes);
+    }
+
+    if looks_like_dss(bytes) {
+        return parse_dss(bytes);
+    }
+
+    if looks_like_iamf(bytes) {
+        return parse_iamf(bytes);
     }
 
     if looks_like_ast(bytes) {

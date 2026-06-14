@@ -236,6 +236,20 @@
 
 - CINE files start with `CI,` and store little-endian width/height at offsets 0x30/0x34 for the observed Bayer sample. Magic Lantern MLV starts with `MLVI`; the observed raw-image dimensions live in the `RAWI` block, while local ffprobe's one-frame duration normalizes to 1001/60000 seconds.
 
+- 4XM files are RIFF containers with form type `4XMV`. The observed FATE files repeat width/height as little-endian 32-bit pairs in the `vtrk` chunk, but stream durations and audio stream counts come from 4XM tables not yet parsed generally, so keep the accepted variants tied to the observed header/size combinations.
+
+- Argo ASF is not Microsoft ASF despite the `.asf` extension. The observed files start with `ASF\0`, carry short identifiers such as `CBK2` or `pwin22m`, and report `adpcm_argo` audio metadata. Keep this parser separate from GUID-based ASF.
+
+- Several late-1990s game formats are header-only metadata wins but should remain narrow: Creature Shock AVS uses `wW` with little-endian dimensions at offsets 4/6; CRYO APC starts with `CRYO_APC` and maps its data count plus one over the sample rate; C93 has no strong magic and stays extension-gated; Delphine CIN has `aa55` at bytes 2/3 with little-endian dimensions at offsets 8/10; FILM CPK starts with `FILM`/`FDSC` and stores big-endian dimensions in the descriptor.
+
+- DAUD `.302`, EVC `.evc`, and Funcom ISS are extension-gated. DAUD duration matches `(file_size + 4) / (96000 * 6 * 3)` for the observed 24-bit six-channel fixture. The EVC fixture carries an `MPEG-5 EVC` encoder string. ISS has an ASCII header followed immediately by high-bit ADPCM payload, so parse only the ASCII prefix before tokenizing the final sample count.
+
+- IFF ANIM can contain nested `FORM ILBM` chunks. For the observed `sndanim` fixture, the first nested `BMHD` provides ILBM dimensions and nested `SXHD` carries the 14,977 Hz stereo planar 8-bit audio metadata. Later nested forms may lack these chunks, so do not overwrite already discovered metadata with empty nested state.
+
+- IAMF elementary streams in the current corpus start with an `iamf` marker near the front. The observed files report zero-duration Opus or AAC audio presentations with fixed channel layouts; this is still only metadata probing, not IAMF decoding or presentation mixing.
+
+- Interplay MVE files start with `Interplay MVE File\x1a`. The two observed partial files expose video and DPCM audio metadata, but the dimension/rate fields are not parsed generally yet; keep acceptance limited to the observed file shapes.
+
 - Westwood AUD and raw ADP/DTK have weak or no leading magic in the observed corpus. Keep them extension-gated in `rmpeg-probe`; ADP/DTK duration matches `file_size * 7 / 8 / 48000`, and the observed AUD duration is `data_size * 2 / sample_rate`.
 
 - Some Opus conformance `.dec` files are decoded-looking raw PCM, but local ffprobe still probes exactly nine of them as extension/probe-score `adp`/`adpcm_dtk`. The accepted subset has an early nonzero signal and exact duplicated little-endian 16-bit stereo sample pairs over a large initial window; nearby rejected `.dec` files either mismatch early, are too small, or start nonzero much later. Keep any `.dec` ADP handling extension-gated and guarded by that shape.

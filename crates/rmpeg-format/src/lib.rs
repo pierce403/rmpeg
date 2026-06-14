@@ -39,6 +39,7 @@ pub mod fits;
 pub mod flac;
 pub mod flic;
 pub mod flv;
+pub mod fourxm;
 pub mod gdv;
 pub mod gif;
 pub mod h264;
@@ -51,6 +52,7 @@ pub mod jpeg2000;
 pub mod jv;
 pub mod jxl;
 pub mod kvag;
+pub mod legacy_media;
 pub mod matroska;
 pub mod mimic;
 pub mod mlp;
@@ -150,6 +152,7 @@ pub use fits::parse_fits;
 pub use flac::parse_flac;
 pub use flic::parse_flic;
 pub use flv::parse_flv;
+pub use fourxm::parse_fourxm;
 pub use gdv::parse_gdv;
 pub use gif::parse_gif;
 pub use h264::parse_h264_annex_b;
@@ -162,6 +165,11 @@ pub use jpeg2000::parse_jpeg2000_codestream;
 pub use jv::parse_jv;
 pub use jxl::parse_jxl;
 pub use kvag::parse_kvag;
+pub use legacy_media::{
+    parse_argo_asf, parse_creatureshock_avs, parse_cryo_apc, parse_cyberia_c93, parse_daud,
+    parse_delphine_cin, parse_dirac, parse_dss, parse_evc, parse_film_cpk, parse_funcom_iss,
+    parse_iamf, parse_interplay_mve,
+};
 pub use matroska::parse_matroska;
 pub use mimic::parse_mimic_cam;
 pub use mlp::parse_mlp_or_truehd;
