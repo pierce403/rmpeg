@@ -7,22 +7,27 @@ use crate::{
     ape::parse_ape,
     asf::{looks_like_asf, parse_asf},
     avi::{looks_like_avi, parse_avi},
+    bethsoftvid::{looks_like_bethsoftvid, parse_bethsoftvid},
     bfstm::{looks_like_bfstm_or_brstm, parse_bfstm_or_brstm},
     bink::{looks_like_bink, parse_bink},
     bmp::{looks_like_bmp, parse_bmp},
     brender_pix::{looks_like_brender_pix, parse_brender_pix},
+    caf::{looks_like_caf, parse_caf},
     dds::parse_dds,
     dfa::{looks_like_dfa, parse_dfa},
     dnxhd::{looks_like_raw_dnxhd, parse_raw_dnxhd},
     dts::{looks_like_mpegts, looks_like_raw_dts, parse_dtshd, parse_mpegts_dts, parse_raw_dts},
     exr::{looks_like_exr, parse_exr},
+    fits::{looks_like_fits, parse_fits},
     flac::parse_flac,
     gif::{looks_like_gif, parse_gif},
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
     hevc::{looks_like_hevc_annex_b, parse_hevc_annex_b},
+    iff::{looks_like_iff, parse_iff},
     ivf::parse_ivf,
     jpeg::{looks_like_jpeg, parse_jpeg},
     jpeg2000::{looks_like_jpeg2000_codestream, parse_jpeg2000_codestream},
+    jxl::{looks_like_jxl, parse_jxl},
     matroska::{looks_like_matroska, parse_matroska},
     mlp::{looks_like_mlp_or_truehd, parse_mlp_or_truehd},
     mp3::parse_mp3,
@@ -34,6 +39,7 @@ use crate::{
     pnm::{looks_like_binary_pnm, parse_pnm},
     psd::{looks_like_psd, parse_psd},
     sgi::{looks_like_sgi, parse_sgi},
+    smjpeg::{looks_like_smjpeg, parse_smjpeg},
     subtitle::{looks_like_subtitle, parse_subtitle},
     sunrast::{looks_like_sunrast, parse_sunrast},
     tak::parse_tak,
@@ -41,6 +47,7 @@ use crate::{
     tiff::{looks_like_tiff, parse_tiff},
     tta::parse_tta,
     tty::{looks_like_tty, parse_tty},
+    voc::{looks_like_voc, parse_voc},
     vvc::{looks_like_vvc_annex_b, parse_vvc_annex_b},
     wav::parse_wav,
     wavpack::parse_wavpack,
@@ -67,6 +74,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_avi(bytes);
     }
 
+    if looks_like_iff(bytes) {
+        return parse_iff(bytes);
+    }
+
     if looks_like_mxf(bytes) {
         return parse_mxf(bytes);
     }
@@ -77,6 +88,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_adts_aac(bytes) {
         return parse_adts_aac(bytes);
+    }
+
+    if looks_like_caf(bytes) {
+        return parse_caf(bytes);
     }
 
     if looks_like_raw_ac3_or_eac3(bytes) {
@@ -115,6 +130,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_amr_nb(bytes);
     }
 
+    if looks_like_voc(bytes) {
+        return parse_voc(bytes);
+    }
+
     if bytes.starts_with(b"wvpk") {
         return parse_wavpack(bytes);
     }
@@ -133,6 +152,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_bink(bytes) {
         return parse_bink(bytes);
+    }
+
+    if looks_like_smjpeg(bytes) {
+        return parse_smjpeg(bytes);
+    }
+
+    if looks_like_bethsoftvid(bytes) {
+        return parse_bethsoftvid(bytes);
     }
 
     if looks_like_bfstm_or_brstm(bytes) {
@@ -163,6 +190,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_png(bytes);
     }
 
+    if looks_like_jxl(bytes) {
+        return parse_jxl(bytes);
+    }
+
     if looks_like_gif(bytes) {
         return parse_gif(bytes);
     }
@@ -173,6 +204,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_brender_pix(bytes) {
         return parse_brender_pix(bytes);
+    }
+
+    if looks_like_fits(bytes) {
+        return parse_fits(bytes);
     }
 
     if looks_like_sgi(bytes) {

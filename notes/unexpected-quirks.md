@@ -135,3 +135,17 @@
 - PP_BNK has no reliable leading magic number, so `rmpeg-probe` only enables it by observed FATE extensions such as `.5c`, `.11c`, and `.44c`. The header's data-size field maps to duration as `data_size * 2 / sample_rate`, while a second 20-byte descriptor after the first data block can create another mono stream even when the second stream payload is truncated.
 
 - CDXL frame size, width, height, and per-frame audio sample count are fixed near the beginning of each frame. FFprobe reports CDXL video duration as missing, which normalizes to 0.0 in the harness, while audio duration is `floor(file_size / frame_size) * audio_samples_per_frame / 11025`.
+
+- FITS image dimensions are plain ASCII header cards. `NAXIS1` and `NAXIS2` are enough for the observed image fixtures, and local ffprobe reports missing video duration, which the harness normalizes to 0.0.
+
+- IFF `FORM` is a container family, not one format. The observed ILBM/PBM files need `BMHD` width/height and codec `iff_ilbm`, while 8SVX audio needs `VHDR` sample counts plus optional `CHAN` stereo metadata. Fibonacci-compressed 8SVX reports `bits_per_sample` 4.
+
+- CAF compressed duration comes from the packet table: `valid_frames + priming_frames + remainder_frames`, divided by sample rate. For the PCM CAF fixture, local ffprobe's duration includes the data chunk's 4-byte edit-count field in the byte count.
+
+- Creative VOC ADPCM duration is byte-size-derived from the first sound-data block region and the codec bit width. The time constant maps to sample rate as `1_000_000 / (256 - time_constant)`, which gives the observed 11111 Hz.
+
+- Creative ADPCM in WAV uses WAVE format tag `0x0200` and can have a data chunk whose declared size extends beyond the partial file. For metadata probing, keep the complete `fmt ` chunk and use the available data bytes for duration rather than rejecting the truncated `data` chunk.
+
+- The current JPEG XL probe is deliberately narrow. It recognizes the observed raw codestream prefixes and boxed `jxlc`/`jxlp` wrappers, including extended-size boxes, but it is not a general JPEG XL size-header parser yet.
+
+- SMJPEG stores a millisecond duration in its header before `_SND` and `_VID` descriptors. Bethesda VID and VMD fixtures report no stream duration in ffprobe, so returning 0.0 normalized duration is correct for the current harness.

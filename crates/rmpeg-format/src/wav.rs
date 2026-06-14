@@ -41,6 +41,10 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavFile> {
             .checked_add(chunk_size)
             .ok_or_else(|| RmpegError::InvalidData("WAV chunk size overflow".to_string()))?;
         if chunk_end > bytes.len() {
+            if &chunk_id == b"data" {
+                data = Some((chunk_start, bytes.len().saturating_sub(chunk_start)));
+                break;
+            }
             return Err(RmpegError::UnexpectedEof {
                 needed: chunk_end,
                 remaining: bytes.len(),
@@ -61,22 +65,15 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavFile> {
     let (data_offset, data_size) =
         data.ok_or_else(|| RmpegError::InvalidData("missing data chunk".to_string()))?;
 
-    validate_pcm(fmt)?;
+    validate_wav_format(fmt)?;
 
-    let bytes_per_second = u32::from(fmt.block_align)
-        .checked_mul(fmt.sample_rate)
-        .ok_or_else(|| RmpegError::InvalidData("WAV byte rate overflow".to_string()))?;
-    let duration_seconds = if bytes_per_second == 0 {
-        0.0
-    } else {
-        data_size as f64 / bytes_per_second as f64
-    };
+    let duration_seconds = duration_seconds(fmt, data_size)?;
 
     Ok(WavFile {
         metadata: AudioStreamMetadata {
             index: 0,
             codec_type: "audio".to_string(),
-            codec_name: codec_name(fmt.bits_per_sample)?.to_string(),
+            codec_name: codec_name(fmt)?.to_string(),
             sample_rate: fmt.sample_rate,
             channels: fmt.channels,
             bits_per_sample: fmt.bits_per_sample,
@@ -112,17 +109,25 @@ fn parse_fmt(bytes: &[u8]) -> Result<WavFmt> {
     Ok(fmt)
 }
 
-fn validate_pcm(fmt: WavFmt) -> Result<()> {
-    if fmt.audio_format != 1 {
-        return Err(RmpegError::Unsupported(format!(
-            "WAV audio format {} is not PCM",
-            fmt.audio_format
-        )));
-    }
+fn validate_wav_format(fmt: WavFmt) -> Result<()> {
     if fmt.channels == 0 {
         return Err(RmpegError::Unsupported(format!(
             "WAV channel count {} is not supported",
             fmt.channels
+        )));
+    }
+    if fmt.audio_format == 0x0200 {
+        if fmt.channels != 1 || fmt.bits_per_sample != 4 || fmt.sample_rate == 0 {
+            return Err(RmpegError::Unsupported(
+                "Creative ADPCM WAV layout is not supported".to_string(),
+            ));
+        }
+        return Ok(());
+    }
+    if fmt.audio_format != 1 {
+        return Err(RmpegError::Unsupported(format!(
+            "WAV audio format {} is not PCM",
+            fmt.audio_format
         )));
     }
     if !matches!(fmt.bits_per_sample, 8 | 16 | 24 | 32) {
@@ -154,8 +159,25 @@ fn validate_pcm(fmt: WavFmt) -> Result<()> {
     Ok(())
 }
 
-fn codec_name(bits_per_sample: u16) -> Result<&'static str> {
-    match bits_per_sample {
+fn duration_seconds(fmt: WavFmt, data_size: usize) -> Result<f64> {
+    if fmt.audio_format == 0x0200 {
+        return Ok(data_size as f64 * 2.0 / fmt.sample_rate as f64);
+    }
+    let bytes_per_second = u32::from(fmt.block_align)
+        .checked_mul(fmt.sample_rate)
+        .ok_or_else(|| RmpegError::InvalidData("WAV byte rate overflow".to_string()))?;
+    if bytes_per_second == 0 {
+        Ok(0.0)
+    } else {
+        Ok(data_size as f64 / bytes_per_second as f64)
+    }
+}
+
+fn codec_name(fmt: WavFmt) -> Result<&'static str> {
+    if fmt.audio_format == 0x0200 {
+        return Ok("adpcm_ct");
+    }
+    match fmt.bits_per_sample {
         8 => Ok("pcm_u8"),
         16 => Ok("pcm_s16le"),
         24 => Ok("pcm_s24le"),
@@ -283,5 +305,30 @@ mod tests {
         assert_eq!(wav.metadata.sample_rate, 96_000);
         assert_eq!(wav.metadata.bits_per_sample, 24);
         assert_eq!(wav.data_size, 6);
+    }
+
+    #[test]
+    fn parses_truncated_creative_adpcm_data_chunk() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&0x1000_u32.to_le_bytes());
+        bytes.extend_from_slice(b"WAVEfmt ");
+        bytes.extend_from_slice(&20_u32.to_le_bytes());
+        bytes.extend_from_slice(&0x0200_u16.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        bytes.extend_from_slice(&44_100_u32.to_le_bytes());
+        bytes.extend_from_slice(&22_050_u32.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        bytes.extend_from_slice(&4_u16.to_le_bytes());
+        bytes.extend_from_slice(&2_u16.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&100_u32.to_le_bytes());
+        bytes.extend_from_slice(&[0; 10]);
+
+        let wav = parse_wav(&bytes).expect("valid truncated creative adpcm wav");
+        assert_eq!(wav.metadata.codec_name, "adpcm_ct");
+        assert_eq!(wav.data_size, 10);
+        assert_eq!(wav.metadata.duration_seconds, 20.0 / 44_100.0);
     }
 }
