@@ -7,6 +7,7 @@ use crate::{
     exr::{looks_like_exr, parse_exr},
     flac::parse_flac,
     h264::{looks_like_h264_annex_b, parse_h264_annex_b},
+    hevc::{looks_like_hevc_annex_b, parse_hevc_annex_b},
     ivf::parse_ivf,
     jpeg::{looks_like_jpeg, parse_jpeg},
     jpeg2000::{looks_like_jpeg2000_codestream, parse_jpeg2000_codestream},
@@ -111,6 +112,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_h264_annex_b(bytes) {
         return parse_h264_annex_b(bytes);
+    }
+
+    if looks_like_hevc_annex_b(bytes) {
+        return parse_hevc_annex_b(bytes);
     }
 
     if looks_like_binary_pnm(bytes) {

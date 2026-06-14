@@ -45,3 +45,5 @@
 - Standalone TIFF FATE files normalize as `tiff_pipe` with stream codec `tiff`. Local ffprobe omits per-stream duration for these files; the comparison harness normalizes missing video duration to 0.0.
 
 - Matroska/WebM files are EBML, but EBML magic alone is too broad. Require `DocType` `matroska` or `webm`, parse only `Tracks` metadata, and require at least one `Cluster` before accepting. FATE has WebM DASH `.hdr` header fragments that carry valid EBML/track metadata while local ffprobe rejects them as standalone inputs.
+
+- Raw HEVC conformance streams can have enough SPS data to expose dimensions while local ffprobe still reports `0x0` because the decoder rejects the SPS tail. Examples include luma/chroma bit-depth mismatches and extension flags with no extension payload. Keep HEVC stream detection separate from usable-dimensions reporting so rmpeg mirrors the oracle instead of over-reporting partial SPS metadata.
