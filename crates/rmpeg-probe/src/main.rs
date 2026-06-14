@@ -1,7 +1,7 @@
 use std::{env, fs, process};
 
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
-use rmpeg_format::probe;
+use rmpeg_format::{parse_raw_g722, parse_raw_g723_1, probe};
 
 fn main() {
     if let Err(error) = run() {
@@ -22,9 +22,32 @@ fn run() -> Result<()> {
     }
 
     let input = fs::read(&path)?;
-    print_probe_json(&probe(&input)?);
+    let document = match probe(&input) {
+        Ok(document) => document,
+        Err(error) => probe_raw_extension(&path, &input).map_err(|_| error)?,
+    };
+    print_probe_json(&document);
 
     Ok(())
+}
+
+fn probe_raw_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
+    let Some(extension) = std::path::Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+    else {
+        return Err(RmpegError::InvalidData(
+            "unsupported raw audio extension".to_string(),
+        ));
+    };
+
+    match extension.to_ascii_lowercase().as_str() {
+        "g722" => parse_raw_g722(input),
+        "tco" => parse_raw_g723_1(input),
+        _ => Err(RmpegError::InvalidData(
+            "unsupported raw audio extension".to_string(),
+        )),
+    }
 }
 
 fn print_probe_json(document: &ProbeDocument) {

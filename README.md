@@ -21,6 +21,9 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - narrow MXF metadata probing for DNXUC FATE fixtures
 - ASF/WMA Lossless metadata probing from ASF header objects
 - TTA, OptimFROG, TAK, MLP, and TrueHD metadata probing
+- Bink video/audio metadata probing for observed FATE fixtures
+- Nintendo BFSTM/BRSTM stream metadata probing
+- extension-gated raw G.722 and G.723.1 audio metadata probing
 - TTY/ANSI text demuxer metadata for observed ffprobe-accepted text reports
 - IVF metadata probing for VP8, VP9, and AV1 video
 - raw Annex B H.264 SPS metadata probing
@@ -44,14 +47,17 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - raw HEVC Annex B bitstream metadata probing
 - narrow raw VVC Annex B bitstream metadata probing
 - WavPack metadata probing from raw blocks and Matroska tracks
+- BRender PIX image metadata probing
 
-Compressed decode is not implemented yet. MP3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, WavPack, WMA Lossless, TTA, OptimFROG, TAK, MLP, TrueHD, H.264, HEVC, VVC, DNxHD/DNxHR, DNXUC, Hap, ProRes, QuickTime Animation, DV, VP8, VP9, AV1, Matroska/WebM, subtitles, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, WavPack, WMA Lossless, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, G.722, G.723.1, BFSTM/BRSTM, H.264, HEVC, VVC, DNxHD/DNxHR, DNXUC, Hap, ProRes, QuickTime Animation, DV, VP8, VP9, AV1, Matroska/WebM, subtitles, DDS, PNG/APNG, BMP, BRender PIX, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
 ## Roadmap
 
 Phase 1 is compatibility: make rmpeg successfully inspect and eventually decode as much of the upstream FFmpeg sample media set as possible, with the site reporting real progress from `site/data/upstream-samples.json`.
+
+Current Phase 1 strict corpus progress is 1584 of 2178 FFmpeg-accepted samples, or 72.727%, on the local upstream sample report.
 
 Phase 2 is optimization. Once Phase 1 is no longer the main blocker, the site should show which older FFmpeg codec paths rmpeg is faster than, using the benchmark JSON instead of hand-written claims.
 

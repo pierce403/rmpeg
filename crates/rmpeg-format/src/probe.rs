@@ -6,7 +6,10 @@ use crate::{
     ape::parse_ape,
     asf::{looks_like_asf, parse_asf},
     avi::{looks_like_avi, parse_avi},
+    bfstm::{looks_like_bfstm_or_brstm, parse_bfstm_or_brstm},
+    bink::{looks_like_bink, parse_bink},
     bmp::{looks_like_bmp, parse_bmp},
+    brender_pix::{looks_like_brender_pix, parse_brender_pix},
     dds::parse_dds,
     dfa::{looks_like_dfa, parse_dfa},
     dnxhd::{looks_like_raw_dnxhd, parse_raw_dnxhd},
@@ -74,7 +77,7 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_adts_aac(bytes);
     }
 
-    if bytes.starts_with(b"ID3") || looks_like_mp3_frame(bytes) {
+    if bytes.starts_with(b"ID3") || looks_like_mp3(bytes) {
         return parse_mp3(bytes);
     }
 
@@ -122,6 +125,14 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
         return parse_raw_dnxhd(bytes);
     }
 
+    if looks_like_bink(bytes) {
+        return parse_bink(bytes);
+    }
+
+    if looks_like_bfstm_or_brstm(bytes) {
+        return parse_bfstm_or_brstm(bytes);
+    }
+
     if looks_like_mpegts(bytes) {
         return parse_mpegts_dts(bytes);
     }
@@ -148,6 +159,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_bmp(bytes) {
         return parse_bmp(bytes);
+    }
+
+    if looks_like_brender_pix(bytes) {
+        return parse_brender_pix(bytes);
     }
 
     if looks_like_sgi(bytes) {
@@ -223,17 +238,98 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
     ))
 }
 
-fn looks_like_mp3_frame(bytes: &[u8]) -> bool {
-    if bytes.len() < 4 || bytes[0] != 0xff || (bytes[1] & 0xe0) != 0xe0 {
+fn looks_like_mp3(bytes: &[u8]) -> bool {
+    if bytes.len() < 4 {
         return false;
     }
-    let version_id = (bytes[1] >> 3) & 0b11;
-    let layer = (bytes[1] >> 1) & 0b11;
-    let bitrate_index = (bytes[2] >> 4) & 0b1111;
-    let sample_rate_index = (bytes[2] >> 2) & 0b11;
-    version_id != 0b01
-        && layer == 0b01
-        && bitrate_index != 0
-        && bitrate_index != 15
-        && sample_rate_index != 0b11
+    let limit = bytes.len().saturating_sub(4).min(1024);
+    (0..=limit).any(|offset| {
+        let Some(frame_len) = mp3_frame_len(&bytes[offset..offset + 4]) else {
+            return false;
+        };
+        let next = offset + frame_len;
+        next + 4 <= bytes.len() && mp3_frame_len(&bytes[next..next + 4]).is_some()
+    })
+}
+
+fn mp3_frame_len(header: &[u8]) -> Option<usize> {
+    if header.len() < 4 || header[0] != 0xff || (header[1] & 0xe0) != 0xe0 {
+        return None;
+    }
+    let raw = u32::from_be_bytes([header[0], header[1], header[2], header[3]]);
+    let version_id = (raw >> 19) & 0b11;
+    let layer = (raw >> 17) & 0b11;
+    let bitrate_index = ((raw >> 12) & 0b1111) as usize;
+    let sample_rate_index = ((raw >> 10) & 0b11) as usize;
+    let padding = ((raw >> 9) & 0b1) as usize;
+    if version_id == 0b01 || layer != 0b01 || bitrate_index == 0 || bitrate_index == 15 {
+        return None;
+    }
+    let bitrate_kbps = match version_id {
+        0b11 => MPEG1_LAYER3_BITRATES[bitrate_index],
+        _ => MPEG2_LAYER3_BITRATES[bitrate_index],
+    }?;
+    let sample_rate = mp3_sample_rate(version_id, sample_rate_index)?;
+    let coefficient = if version_id == 0b11 { 144_000 } else { 72_000 };
+    Some(coefficient * bitrate_kbps as usize / sample_rate as usize + padding)
+}
+
+fn mp3_sample_rate(version_id: u32, index: usize) -> Option<u32> {
+    let base = [44_100, 48_000, 32_000].get(index).copied()?;
+    match version_id {
+        0b11 => Some(base),
+        0b10 => Some(base / 2),
+        0b00 => Some(base / 4),
+        _ => None,
+    }
+}
+
+const MPEG1_LAYER3_BITRATES: [Option<u16>; 16] = [
+    None,
+    Some(32),
+    Some(40),
+    Some(48),
+    Some(56),
+    Some(64),
+    Some(80),
+    Some(96),
+    Some(112),
+    Some(128),
+    Some(160),
+    Some(192),
+    Some(224),
+    Some(256),
+    Some(320),
+    None,
+];
+
+const MPEG2_LAYER3_BITRATES: [Option<u16>; 16] = [
+    None,
+    Some(8),
+    Some(16),
+    Some(24),
+    Some(32),
+    Some(40),
+    Some(48),
+    Some(56),
+    Some(64),
+    Some(80),
+    Some(96),
+    Some(112),
+    Some(128),
+    Some(144),
+    Some(160),
+    None,
+];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_short_input_without_panicking() {
+        let error = probe(&[0xff]).expect_err("short input");
+
+        assert!(error.to_string().contains("unsupported or unrecognized"));
+    }
 }

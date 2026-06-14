@@ -111,3 +111,13 @@
 - AVI fourcc mapping is still a high-yield probe path, but generic packet counting is not. `FPS1` maps to `fraps`, `LAGS` maps to `lagarith`, and PCM WAVEFORMATEX tag `0x0001` should use the bit depth to choose `pcm_u8` or `pcm_s16le`. Partial AVI durations remain codec/container specific, so rmpeg should not cap all video duration from a raw `movi` chunk count.
 
 - JPEG-LS FATE samples use JPEG SOI followed by SOF55 marker `0xfff7`, whose dimensions follow the normal JPEG SOF layout. When that marker is the first payload after SOI, ffprobe reports format `jpegls_pipe` with no duration; when Adobe/metadata segments precede it, ffprobe reports format `image2` and the usual still-image 0.04 second duration.
+
+- Bink audio flags are not just "bit 0x40 means DCT": the observed RDFT fixture has the high bit set (`0xe0`), while DCT fixtures use values such as `0x50` and `0x70`. The sample rate is a 16-bit little-endian field at byte offset 48 in the observed BIK header.
+
+- BRender PIX headers have two observed dimension layouts. Some fixtures store width/height as little-endian 16-bit values at offsets 28/30; square texture fixtures such as `rivrock1.pix` and `testtex.pix` store height at offset 26 and width at offset 28, leaving offset 30 as zero.
+
+- BFSTM/BRSTM metadata can be probed from the stream-info record after `INFO` or `HEAD`. CSTM is little-endian and reports `adpcm_thp_le`; FSTM and RSTM are big-endian and report `adpcm_thp`. The sample count at stream-info offset +12 matches ffprobe duration when divided by sample rate.
+
+- Raw G.722 and G.723.1 are extension-gated in `rmpeg-probe`, not byte-only probes. FFprobe accepts `.g722` and `.tco` samples with demuxer hints from the filename, but the byte patterns are too broad to enable globally in `probe(bytes)`.
+
+- Some MP3 conformance samples have leading padding before the first MP3 frame. `sin1k0db.bit` starts its first valid frame at byte 215, so dispatch needs a small consecutive-frame lookahead. Free-format MP3-like sync remains intentionally rejected because local ffprobe classifies `he_free.bit` as G.729, not MP3.
