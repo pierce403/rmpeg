@@ -182,15 +182,24 @@ fn parse_hdlr(data: &[u8], track: &mut TrackBuilder) -> Result<()> {
 }
 
 fn parse_stsd(data: &[u8], track: &mut TrackBuilder) -> Result<()> {
-    if data.len() < 16 {
+    if data.len() < 8 {
         return Err(RmpegError::UnexpectedEof {
-            needed: 16,
+            needed: 8,
             remaining: data.len(),
         });
     }
     let entry_count = read_u32(data, 4)?;
     if entry_count == 0 {
         return Ok(());
+    }
+    if !matches!(track.handler.as_ref(), Some(b"soun" | b"vide")) {
+        return Ok(());
+    }
+    if data.len() < 16 {
+        return Err(RmpegError::UnexpectedEof {
+            needed: 16,
+            remaining: data.len(),
+        });
     }
     let entry_size = read_u32(data, 8)? as usize;
     if data.len() < 8 + entry_size || entry_size < 16 {
@@ -529,6 +538,10 @@ impl TrackBuilder {
 fn codec_name(coding: [u8; 4]) -> &'static str {
     match &coding {
         b"AVdh" | b"AVdn" => "dnxhd",
+        b"AVDJ" => "mjpeg",
+        b"CFHD" => "cfhd",
+        b"DXD3" | b"DXDI" => "dxv",
+        b"8BPS" => "8bps",
         b"Hap1" | b"Hap5" | b"HapA" | b"HapM" | b"HapY" => "hap",
         b"MAC3" => "mace3",
         b"MAC6" => "mace6",
@@ -539,6 +552,7 @@ fn codec_name(coding: [u8; 4]) -> &'static str {
         b"mp4a" => "aac",
         b"mp4v" => "mpeg4",
         b"hvc1" | b"hev1" => "hevc",
+        b"icod" => "aic",
         b"ima4" => "adpcm_ima_qt",
         b"in24" => "pcm_s24le",
         b"msVo" => "vorbis",
@@ -612,4 +626,19 @@ fn read_u64(bytes: &[u8], offset: usize) -> Result<u64> {
         bytes[offset + 6],
         bytes[offset + 7],
     ]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_observed_quicktime_sample_entry_codecs() {
+        assert_eq!(codec_name(*b"icod"), "aic");
+        assert_eq!(codec_name(*b"AVDJ"), "mjpeg");
+        assert_eq!(codec_name(*b"CFHD"), "cfhd");
+        assert_eq!(codec_name(*b"DXD3"), "dxv");
+        assert_eq!(codec_name(*b"DXDI"), "dxv");
+        assert_eq!(codec_name(*b"8BPS"), "8bps");
+    }
 }

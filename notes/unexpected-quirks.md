@@ -99,3 +99,9 @@
 - TAK FATE metadata includes an embedded RIFF/WAVE header near the front. The RIFF data chunk can advertise the original full PCM size even when the TAK file itself is partial, so read only the embedded `fmt ` and `data` sizes for probe metadata instead of handing it to the strict WAV parser.
 
 - OptimFROG `.osq` stores bit depth and channels together in the little-endian 16-bit field at offset 10: low byte is bit depth, high byte is channel count. The total sample count is a little-endian integer at offset 24 for the observed fixture.
+
+- AVI can be audio-only in the FATE corpus. Duck DK3/DK4 ADPCM uses WAVEFORMATEX tags `0x0062`/`0x0061`; ffprobe reports those compressed audio streams with `bits_per_sample` 0 even when the container field is 3, 4, or 16. For the observed audio-only Duck files, ffprobe's duration matches `(dwLength + 8) * dwScale / dwRate`; in multi-stream Duck AVI, missing audio duration still normalizes to 0.0.
+
+- Truncated AVI files can carry a full original `dwLength` in `strh` while only part of the `movi` list is present. FFprobe may cap video duration from the usable chunks that remain, but codec-specific packet validity still matters: simple chunk counts do not fully explain the partial Duck TrueMotion cases.
+
+- More QuickTime sample-entry fourccs are metadata-only wins: `icod` is Apple Intermediate Codec (`aic`), `AVDJ` is Avid-flavored Motion JPEG (`mjpeg`), `CFHD` is CineForm (`cfhd`), `DXD3`/`DXDI` are DXV (`dxv`), and `8BPS` is QuickTime 8BPS video. These tags identify streams but do not imply rmpeg can decode the payloads.
