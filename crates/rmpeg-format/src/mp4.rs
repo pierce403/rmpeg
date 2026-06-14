@@ -201,6 +201,17 @@ fn parse_audio_sample_entry(data: &[u8], entry: usize, track: &mut TrackBuilder)
     }
     track.channels = Some(read_u16(data, entry + 24)?);
     track.sample_rate = Some(read_u32(data, entry + 32)? >> 16);
+    match track.codec_name.as_deref() {
+        Some("amr_nb") => {
+            track.channels = Some(1);
+            track.sample_rate = Some(8_000);
+        }
+        Some("amr_wb") => {
+            track.channels = Some(1);
+            track.sample_rate = Some(16_000);
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -305,6 +316,8 @@ fn codec_name(coding: [u8; 4]) -> &'static str {
         b"mp4a" => "aac",
         b"hvc1" | b"hev1" => "hevc",
         b"mp3 " => "mp3",
+        b"samr" => "amr_nb",
+        b"sawb" => "amr_wb",
         _ => "unknown",
     }
 }

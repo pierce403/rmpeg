@@ -13,8 +13,8 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - a framemd5-like decode/hash path for PCM data
 - MP3 frame-header metadata probing
 - FLAC STREAMINFO metadata probing
-- Ogg/Opus and Ogg/Vorbis header metadata probing
-- MP4/MOV track metadata probing for H.264 video and AAC audio
+- Ogg/Opus and Ogg/Vorbis header metadata probing, including truncated final-page duration handling
+- MP4/MOV track metadata probing for H.264 video and AAC or AMR audio
 - IVF metadata probing for VP8, VP9, and AV1 video
 - raw Annex B H.264 SPS metadata probing
 - binary PNM image metadata probing for PBM, PGM, and PPM files
@@ -29,12 +29,12 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - JPEG 2000 codestream metadata probing
 - TGA image metadata probing for files with a TGA 2.0 footer
 - TIFF image metadata probing
-- conservative Matroska/WebM track metadata probing
+- conservative Matroska/WebM track metadata probing, including Opus/Vorbis compressed audio metadata
 - raw HEVC Annex B bitstream metadata probing
 - narrow raw VVC Annex B bitstream metadata probing
 - WavPack metadata probing from raw blocks and Matroska tracks
 
-Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, WavPack, H.264, HEVC, VVC, VP8, VP9, AV1, Matroska/WebM, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, FLAC, Opus, Vorbis, AAC, AMR-NB, AMR-WB, WavPack, H.264, HEVC, VVC, VP8, VP9, AV1, Matroska/WebM, DDS, PNG/APNG, BMP, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 

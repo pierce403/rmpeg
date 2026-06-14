@@ -198,7 +198,10 @@ impl TrackBuilder {
                     codec_name: codec_name.to_string(),
                     sample_rate: Some(sample_rate),
                     channels: Some(channels),
-                    bits_per_sample: Some(self.bits_per_sample.unwrap_or(0)),
+                    bits_per_sample: Some(audio_bits_per_sample(
+                        codec_name,
+                        self.bits_per_sample.unwrap_or(0),
+                    )),
                     duration_seconds: None,
                     width: None,
                     height: None,
@@ -207,6 +210,13 @@ impl TrackBuilder {
             }
             _ => Ok(None),
         }
+    }
+}
+
+fn audio_bits_per_sample(codec_name: &str, container_bits: u16) -> u16 {
+    match codec_name {
+        "aac" | "mp3" | "opus" | "vorbis" => 0,
+        _ => container_bits,
     }
 }
 
@@ -494,6 +504,7 @@ mod tests {
         assert_eq!(doc.streams[0].codec_name, "opus");
         assert_eq!(doc.streams[0].sample_rate, Some(48_000));
         assert_eq!(doc.streams[0].channels, Some(2));
+        assert_eq!(doc.streams[0].bits_per_sample, Some(0));
     }
 
     #[test]

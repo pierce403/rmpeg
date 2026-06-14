@@ -51,3 +51,9 @@
 - Raw VVC conformance streams use a different two-byte NAL header from HEVC: the type that local ffprobe treats as SPS is `15`, derived from the second header byte. A narrow SPS path currently matches the common compact PTL layout and rejects implausibly tiny dimensions, leaving the more exotic SPS variants as honest failures instead of broadening detection.
 
 - Raw WavPack blocks carry total sample count in the first block header, but the source audio metadata is usually preserved as embedded RIFF/WAVE metadata shortly after the header. For the 12-bit fixture, ffprobe reports the WavPack storage width (`16`) rather than the embedded WAVE valid-bit count (`12`). DSD WavPack uses embedded DSDIFF `FS  `/`CHNL` chunks instead of WAVE.
+
+- Several Vorbis FATE `.ogg` samples are intentionally truncated around 100 KB. Their final Ogg page header may still be present and can carry a later granule position, but ffprobe appears to base duration on the last complete page. Ogg probing should keep stream metadata from the first complete identification packet and ignore granules from truncated pages.
+
+- AMR-WB FATE `.awb` samples are 3GP/MP4 files with `sawb` sample entries, not raw `#!AMR-WB` files. The MP4 audio sample-entry fields can say stereo even though ffprobe reports mono AMR-WB at 16 kHz, so `samr`/`sawb` need codec-specific channel and sample-rate normalization.
+
+- Matroska `A_OPUS` tracks may carry an Audio `BitDepth` element such as 32, but ffprobe reports compressed Opus bit depth as 0. Treat lossy compressed Matroska audio bit depth as codec metadata, not container storage depth.
