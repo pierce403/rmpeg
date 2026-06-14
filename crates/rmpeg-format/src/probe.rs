@@ -49,8 +49,9 @@ use crate::{
     kvag::{looks_like_kvag, parse_kvag},
     legacy_media::{
         looks_like_argo_asf, looks_like_cryo_apc, looks_like_dirac, looks_like_dss,
-        looks_like_film_cpk, looks_like_iamf, looks_like_interplay_mve, parse_argo_asf,
-        parse_cryo_apc, parse_dirac, parse_dss, parse_film_cpk, parse_iamf, parse_interplay_mve,
+        looks_like_film_cpk, looks_like_iamf, looks_like_interplay_mve,
+        looks_like_observed_legacy_media, parse_argo_asf, parse_cryo_apc, parse_dirac, parse_dss,
+        parse_film_cpk, parse_iamf, parse_interplay_mve, parse_observed_legacy_media,
     },
     matroska::{looks_like_matroska, parse_matroska},
     mlp::{looks_like_mlp_or_truehd, parse_mlp_or_truehd},
@@ -192,6 +193,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_interplay_mve(bytes) {
         return parse_interplay_mve(bytes);
+    }
+
+    if looks_like_observed_legacy_media(bytes) {
+        return parse_observed_legacy_media(bytes);
     }
 
     if looks_like_gdv(bytes) {

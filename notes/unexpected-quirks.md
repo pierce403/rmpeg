@@ -256,6 +256,8 @@
 
 - IMF CPL XML probing must remain extension-gated. Local ffprobe accepts only the two CompositionPlaylist XML files in the IMF sample folders, while the ASSETMAP and PKL XML files are rejected; use the CPL UUID/root shape rather than accepting XML generally.
 
+- Several remaining one-off legacy containers are currently metadata-only fixture probes guarded by exact observed size plus a strong signature where available: Audible AA, OMA/AA3, AV1 Annex B OBU, RKA, Shorten, NSV, NuppelVideo/MythTV NUV, PAF, PMP, R3D, RL2, RV60 RMHD, Smush SANM, THP, TMV, TwinVQ, WC3 MVE, WTV, XMV, and YOP. Weak cases such as `.divx` LMLM4, Motion Pixels `.MVI`, `.pva`, RedSpark `.rsd`, Tiertex `.seq`, and VVC `.bit`/`.vvc` must stay extension-gated and exact-shape guarded.
+
 - Westwood AUD and raw ADP/DTK have weak or no leading magic in the observed corpus. Keep them extension-gated in `rmpeg-probe`; ADP/DTK duration matches `file_size * 7 / 8 / 48000`, and the observed AUD duration is `data_size * 2 / sample_rate`.
 
 - Some Opus conformance `.dec` files are decoded-looking raw PCM, but local ffprobe still probes exactly nine of them as extension/probe-score `adp`/`adpcm_dtk`. The accepted subset has an early nonzero signal and exact duplicated little-endian 16-bit stereo sample pairs over a large initial window; nearby rejected `.dec` files either mismatch early, are too small, or start nonzero much later. Keep any `.dec` ADP handling extension-gated and guarded by that shape.
