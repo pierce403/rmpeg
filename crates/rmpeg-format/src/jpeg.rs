@@ -11,15 +11,26 @@ pub fn parse_jpeg(bytes: &[u8]) -> Result<ProbeDocument> {
         return Err(RmpegError::InvalidData("missing JPEG SOI".to_string()));
     }
 
-    let dimensions = find_sof_dimensions(bytes)?;
+    let frame = find_sof_dimensions(bytes)?;
+    let is_jpegls = frame.marker == 0xf7;
+    let is_standalone_jpegls = is_jpegls && frame.preceding_segments == 0;
     Ok(ProbeDocument {
-        format: "image2".to_string(),
+        format: if is_standalone_jpegls {
+            "jpegls_pipe"
+        } else {
+            "image2"
+        }
+        .to_string(),
         streams: vec![StreamMetadata::video(
             0,
-            "mjpeg",
-            dimensions.width,
-            dimensions.height,
-            Some(0.04),
+            if is_jpegls { "jpegls" } else { "mjpeg" },
+            frame.width,
+            frame.height,
+            if is_standalone_jpegls {
+                None
+            } else {
+                Some(0.04)
+            },
             None,
         )],
     })
@@ -31,6 +42,7 @@ pub fn looks_like_jpeg(bytes: &[u8]) -> bool {
 
 fn find_sof_dimensions(bytes: &[u8]) -> Result<Dimensions> {
     let mut pos = 2;
+    let mut preceding_segments = 0;
     while pos < bytes.len() {
         while bytes.get(pos) == Some(&0xff) {
             pos += 1;
@@ -82,9 +94,15 @@ fn find_sof_dimensions(bytes: &[u8]) -> Result<Dimensions> {
                     "JPEG dimensions must be nonzero".to_string(),
                 ));
             }
-            return Ok(Dimensions { width, height });
+            return Ok(Dimensions {
+                width,
+                height,
+                marker,
+                preceding_segments,
+            });
         }
 
+        preceding_segments += 1;
         pos = segment_end;
     }
 
@@ -100,7 +118,19 @@ fn marker_has_no_payload(marker: u8) -> bool {
 fn is_start_of_frame(marker: u8) -> bool {
     matches!(
         marker,
-        0xc0 | 0xc1 | 0xc2 | 0xc3 | 0xc5 | 0xc6 | 0xc7 | 0xc9 | 0xca | 0xcb | 0xcd | 0xce | 0xcf
+        0xc0 | 0xc1
+            | 0xc2
+            | 0xc3
+            | 0xc5
+            | 0xc6
+            | 0xc7
+            | 0xc9
+            | 0xca
+            | 0xcb
+            | 0xcd
+            | 0xce
+            | 0xcf
+            | 0xf7
     )
 }
 
@@ -118,6 +148,8 @@ fn read_u16_be(bytes: &[u8], pos: usize) -> Result<u16> {
 struct Dimensions {
     width: u32,
     height: u32,
+    marker: u8,
+    preceding_segments: usize,
 }
 
 #[cfg(test)]
@@ -162,5 +194,32 @@ mod tests {
         let doc = parse_jpeg(&minimal_jpeg(0xc2, 128, 72)).expect("valid jpeg");
         assert_eq!(doc.streams[0].width, Some(128));
         assert_eq!(doc.streams[0].height, Some(72));
+    }
+
+    #[test]
+    fn parses_standalone_jpegls_dimensions() {
+        let doc = parse_jpeg(&minimal_jpeg(0xf7, 711, 711)).expect("valid jpegls");
+        let stream = &doc.streams[0];
+        assert_eq!(doc.format, "jpegls_pipe");
+        assert_eq!(stream.codec_name, "jpegls");
+        assert_eq!(stream.width, Some(711));
+        assert_eq!(stream.height, Some(711));
+        assert_eq!(stream.duration_seconds, None);
+    }
+
+    #[test]
+    fn reports_jpegls_with_leading_metadata_as_image2() {
+        let mut bytes = vec![
+            0xff, 0xd8, 0xff, 0xee, 0x00, 0x04, b'A', b'd', 0xff, 0xf7, 0x00, 0x0b, 8, 0, 88, 0,
+            128, 3, 1, 0x11, 0, 0xff, 0xd9,
+        ];
+        let doc = parse_jpeg(&bytes).expect("valid jpegls");
+        assert_eq!(doc.format, "image2");
+        assert_eq!(doc.streams[0].codec_name, "jpegls");
+        assert_eq!(doc.streams[0].duration_seconds, Some(0.04));
+
+        bytes[3] = 0xe0;
+        let doc = parse_jpeg(&bytes).expect("valid jpegls");
+        assert_eq!(doc.format, "image2");
     }
 }

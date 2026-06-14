@@ -8,6 +8,7 @@ use crate::{
     avi::{looks_like_avi, parse_avi},
     bmp::{looks_like_bmp, parse_bmp},
     dds::parse_dds,
+    dfa::{looks_like_dfa, parse_dfa},
     dnxhd::{looks_like_raw_dnxhd, parse_raw_dnxhd},
     dts::{looks_like_mpegts, looks_like_raw_dts, parse_dtshd, parse_mpegts_dts, parse_raw_dts},
     exr::{looks_like_exr, parse_exr},
@@ -131,6 +132,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if bytes.starts_with(b"DDS ") {
         return parse_dds(bytes);
+    }
+
+    if looks_like_dfa(bytes) {
+        return parse_dfa(bytes);
     }
 
     if looks_like_exr(bytes) {

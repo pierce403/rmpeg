@@ -105,3 +105,9 @@
 - Truncated AVI files can carry a full original `dwLength` in `strh` while only part of the `movi` list is present. FFprobe may cap video duration from the usable chunks that remain, but codec-specific packet validity still matters: simple chunk counts do not fully explain the partial Duck TrueMotion cases.
 
 - More QuickTime sample-entry fourccs are metadata-only wins: `icod` is Apple Intermediate Codec (`aic`), `AVDJ` is Avid-flavored Motion JPEG (`mjpeg`), `CFHD` is CineForm (`cfhd`), `DXD3`/`DXDI` are DXV (`dxv`), and `8BPS` is QuickTime 8BPS video. These tags identify streams but do not imply rmpeg can decode the payloads.
+
+- Chronomaster DFA files have a compact `DFIA` header: frame count at byte offset 6, width/height at offsets 8/10, and milliseconds per frame at offset 12, all little-endian 16-bit values in the observed corpus. FFprobe reports duration as `frame_count * milliseconds_per_frame / 1000`.
+
+- AVI fourcc mapping is still a high-yield probe path, but generic packet counting is not. `FPS1` maps to `fraps`, `LAGS` maps to `lagarith`, and PCM WAVEFORMATEX tag `0x0001` should use the bit depth to choose `pcm_u8` or `pcm_s16le`. Partial AVI durations remain codec/container specific, so rmpeg should not cap all video duration from a raw `movi` chunk count.
+
+- JPEG-LS FATE samples use JPEG SOI followed by SOF55 marker `0xfff7`, whose dimensions follow the normal JPEG SOF layout. When that marker is the first payload after SOI, ffprobe reports format `jpegls_pipe` with no duration; when Adobe/metadata segments precede it, ffprobe reports format `image2` and the usual still-image 0.04 second duration.

@@ -25,12 +25,9 @@ pub fn parse_avi(bytes: &[u8]) -> Result<ProbeDocument> {
 
     let mut builders = Vec::new();
     parse_chunks(bytes, 12, bytes.len(), &mut builders)?;
-    let video_chunk_counts = count_observed_video_chunks(bytes);
     let mut streams = Vec::new();
-    for (source_index, builder) in builders.into_iter().enumerate() {
-        if let Some(stream) =
-            builder.into_stream(streams.len(), video_chunk_counts.get(source_index).copied())
-        {
+    for builder in builders {
+        if let Some(stream) = builder.into_stream(streams.len()) {
             streams.push(stream);
         }
     }
@@ -158,11 +155,7 @@ fn parse_audio_stream_format(data: &[u8], stream: &mut AviStreamBuilder) -> Resu
 }
 
 impl AviStreamBuilder {
-    fn into_stream(
-        self,
-        index: usize,
-        observed_video_chunks: Option<u32>,
-    ) -> Option<StreamMetadata> {
+    fn into_stream(self, index: usize) -> Option<StreamMetadata> {
         let stream_type = self.stream_type?;
         if &stream_type == b"vids" {
             let codec = video_codec_name(self.bitmap_codec.or(self.handler)?)?;
@@ -171,13 +164,13 @@ impl AviStreamBuilder {
                 codec,
                 self.width?,
                 self.height?,
-                video_duration_seconds(self.length, self.scale, self.rate, observed_video_chunks),
+                duration_seconds(self.length, self.scale, self.rate),
                 None,
             ));
         }
         if &stream_type == b"auds" {
             let format = self.audio_format?;
-            let codec = audio_codec_name(format)?;
+            let codec = audio_codec_name(format, self.bits_per_sample)?;
             let duration = if index == 0 {
                 audio_duration_seconds(format, self.length, self.scale, self.rate).unwrap_or(0.0)
             } else {
@@ -194,19 +187,6 @@ impl AviStreamBuilder {
         }
         None
     }
-}
-
-fn video_duration_seconds(
-    length: Option<u32>,
-    scale: Option<u32>,
-    rate: Option<u32>,
-    observed_chunks: Option<u32>,
-) -> Option<f64> {
-    let length = match (length, observed_chunks) {
-        (Some(length), Some(observed)) if observed > 0 && observed < length => Some(observed),
-        (length, _) => length,
-    };
-    duration_seconds(length, scale, rate)
 }
 
 fn duration_seconds(length: Option<u32>, scale: Option<u32>, rate: Option<u32>) -> Option<f64> {
@@ -242,6 +222,8 @@ fn audio_bits_per_sample(format: u16, bits_per_sample: Option<u16>) -> u16 {
 fn video_codec_name(fourcc: [u8; 4]) -> Option<&'static str> {
     match &fourcc {
         b"DUCK" => Some("truemotion1"),
+        b"FPS1" => Some("fraps"),
+        b"LAGS" => Some("lagarith"),
         b"MAGY" => Some("magicyuv"),
         b"SMV2" => Some("h264"),
         b"TM20" => Some("truemotion2"),
@@ -252,11 +234,13 @@ fn video_codec_name(fourcc: [u8; 4]) -> Option<&'static str> {
     }
 }
 
-fn audio_codec_name(format: u16) -> Option<&'static str> {
-    match format {
-        0x0055 => Some("mp3"),
-        0x0061 => Some("adpcm_ima_dk4"),
-        0x0062 => Some("adpcm_ima_dk3"),
+fn audio_codec_name(format: u16, bits_per_sample: Option<u16>) -> Option<&'static str> {
+    match (format, bits_per_sample) {
+        (0x0001, Some(8)) => Some("pcm_u8"),
+        (0x0001, Some(16)) => Some("pcm_s16le"),
+        (0x0055, _) => Some("mp3"),
+        (0x0061, _) => Some("adpcm_ima_dk4"),
+        (0x0062, _) => Some("adpcm_ima_dk3"),
         _ => None,
     }
 }
@@ -264,74 +248,6 @@ fn audio_codec_name(format: u16) -> Option<&'static str> {
 fn normalize_fourcc(mut fourcc: [u8; 4]) -> [u8; 4] {
     fourcc.make_ascii_uppercase();
     fourcc
-}
-
-fn count_observed_video_chunks(bytes: &[u8]) -> Vec<u32> {
-    let mut counts = Vec::new();
-    count_movi_lists(bytes, 12, bytes.len(), &mut counts);
-    counts
-}
-
-fn count_movi_lists(bytes: &[u8], mut pos: usize, limit: usize, counts: &mut Vec<u32>) {
-    while pos + 12 <= limit {
-        let size = match read_u32(bytes, pos + 4) {
-            Ok(size) => size as usize,
-            Err(_) => break,
-        };
-        let data_start = pos + 8;
-        let declared_end = match data_start.checked_add(size) {
-            Some(end) => end,
-            None => break,
-        };
-        let end = declared_end.min(limit);
-        if &bytes[pos..pos + 4] == b"LIST" && data_start + 4 <= end {
-            let list_type = &bytes[data_start..data_start + 4];
-            if list_type == b"movi" {
-                count_movi_chunks(bytes, data_start + 4, end, counts);
-            } else {
-                count_movi_lists(bytes, data_start + 4, end, counts);
-            }
-        }
-        if declared_end >= limit {
-            break;
-        }
-        pos = declared_end + (size & 1);
-    }
-}
-
-fn count_movi_chunks(bytes: &[u8], mut pos: usize, limit: usize, counts: &mut Vec<u32>) {
-    while pos + 8 <= limit {
-        let id = &bytes[pos..pos + 4];
-        let size = match read_u32(bytes, pos + 4) {
-            Ok(size) => size as usize,
-            Err(_) => break,
-        };
-        let data_start = pos + 8;
-        let end = match data_start.checked_add(size) {
-            Some(end) if end <= limit => end,
-            _ => break,
-        };
-        if id == b"LIST" && data_start + 4 <= end && &bytes[data_start..data_start + 4] == b"rec " {
-            count_movi_chunks(bytes, data_start + 4, end, counts);
-        } else if matches!(&id[2..4], b"dc" | b"db") {
-            let Some(stream_index) = decimal_stream_index(id) else {
-                pos = end + (size & 1);
-                continue;
-            };
-            if counts.len() <= stream_index {
-                counts.resize(stream_index + 1, 0);
-            }
-            counts[stream_index] = counts[stream_index].saturating_add(1);
-        }
-        pos = end + (size & 1);
-    }
-}
-
-fn decimal_stream_index(id: &[u8]) -> Option<usize> {
-    if id.len() < 2 || !id[0].is_ascii_digit() || !id[1].is_ascii_digit() {
-        return None;
-    }
-    Some(usize::from(id[0] - b'0') * 10 + usize::from(id[1] - b'0'))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -498,6 +414,13 @@ mod tests {
         assert_eq!(stream.bits_per_sample, Some(0));
         let expected = f64::from(649 + 8) * 2048.0 / 44251.0;
         assert!((stream.duration_seconds.unwrap() - expected).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn maps_observed_avi_game_codec_tags() {
+        assert_eq!(video_codec_name(*b"FPS1"), Some("fraps"));
+        assert_eq!(video_codec_name(*b"LAGS"), Some("lagarith"));
+        assert_eq!(audio_codec_name(0x0001, Some(16)), Some("pcm_s16le"));
     }
 
     fn avi_list(kind: &[u8; 4], payload: Vec<u8>) -> Vec<u8> {
