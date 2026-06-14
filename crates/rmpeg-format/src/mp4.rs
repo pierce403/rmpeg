@@ -21,6 +21,13 @@ struct TrackBuilder {
     height: Option<u32>,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum HeifProperty {
+    HevcConfig,
+    Ispe { width: u32, height: u32 },
+    Other,
+}
+
 pub fn parse_mp4(bytes: &[u8]) -> Result<ProbeDocument> {
     if !looks_like_mp4(bytes) {
         return Err(RmpegError::InvalidData(
@@ -47,6 +54,11 @@ pub fn parse_mp4(bytes: &[u8]) -> Result<ProbeDocument> {
                 streams = parsed;
                 break;
             }
+        } else if &header.name == b"meta" {
+            let parsed = parse_heif_meta(bytes, header.data_start, header.end)?;
+            if !parsed.is_empty() {
+                streams = parsed;
+            }
         }
         pos = header.end;
     }
@@ -55,6 +67,31 @@ pub fn parse_mp4(bytes: &[u8]) -> Result<ProbeDocument> {
         return Err(RmpegError::InvalidData(
             "MP4 moov box did not contain supported streams".to_string(),
         ));
+    }
+    if let Some(fragment_duration) = parse_fragment_duration(bytes)? {
+        for stream in &mut streams {
+            if stream.duration_seconds.unwrap_or(0.0) == 0.0 {
+                stream.duration_seconds = Some(fragment_duration);
+            }
+        }
+    }
+    let max_stream_duration = streams
+        .iter()
+        .filter_map(|stream| stream.duration_seconds)
+        .fold(0.0_f64, f64::max);
+    if max_stream_duration > 0.0 {
+        for stream in &mut streams {
+            if stream.duration_seconds.unwrap_or(0.0) == 0.0 {
+                stream.duration_seconds = Some(max_stream_duration);
+            }
+        }
+    }
+    if let Some(movie_duration) = parse_movie_duration(bytes)? {
+        for stream in &mut streams {
+            if stream.duration_seconds.unwrap_or(0.0) > movie_duration {
+                stream.duration_seconds = Some(movie_duration);
+            }
+        }
     }
 
     Ok(ProbeDocument {
@@ -83,6 +120,392 @@ fn parse_moov(bytes: &[u8], start: usize, end: usize) -> Result<Vec<StreamMetada
         pos = header.end;
     }
     Ok(streams)
+}
+
+fn parse_heif_meta(bytes: &[u8], start: usize, end: usize) -> Result<Vec<StreamMetadata>> {
+    if end.saturating_sub(start) < 4 {
+        return Ok(Vec::new());
+    }
+    let mut pos = start + 4;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"iprp" {
+            return parse_heif_iprp(bytes, header.data_start, header.end);
+        }
+        pos = header.end;
+    }
+    Ok(Vec::new())
+}
+
+fn parse_heif_iprp(bytes: &[u8], start: usize, end: usize) -> Result<Vec<StreamMetadata>> {
+    let mut properties = Vec::new();
+    let mut streams = Vec::new();
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        match &header.name {
+            b"ipco" => properties = parse_heif_ipco(bytes, header.data_start, header.end)?,
+            b"ipma" => {
+                streams = parse_heif_ipma(bytes, header.data_start, header.end, &properties)?;
+            }
+            _ => {}
+        }
+        pos = header.end;
+    }
+    Ok(streams)
+}
+
+fn parse_heif_ipco(bytes: &[u8], start: usize, end: usize) -> Result<Vec<HeifProperty>> {
+    let mut properties = Vec::new();
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        let property = match &header.name {
+            b"hvcC" => HeifProperty::HevcConfig,
+            b"ispe" if header.data_start + 12 <= header.end => HeifProperty::Ispe {
+                width: read_u32(bytes, header.data_start + 4)?,
+                height: read_u32(bytes, header.data_start + 8)?,
+            },
+            _ => HeifProperty::Other,
+        };
+        properties.push(property);
+        pos = header.end;
+    }
+    Ok(properties)
+}
+
+fn parse_heif_ipma(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    properties: &[HeifProperty],
+) -> Result<Vec<StreamMetadata>> {
+    if end.saturating_sub(start) < 8 {
+        return Ok(Vec::new());
+    }
+    let version = bytes[start];
+    let flags = (u32::from(bytes[start + 1]) << 16)
+        | (u32::from(bytes[start + 2]) << 8)
+        | u32::from(bytes[start + 3]);
+    let item_count = read_u32(bytes, start + 4)? as usize;
+    let mut pos = start + 8;
+    let mut streams = Vec::new();
+    for _ in 0..item_count {
+        if version < 1 {
+            if pos + 3 > end {
+                break;
+            }
+            pos += 2;
+        } else {
+            if pos + 5 > end {
+                break;
+            }
+            pos += 4;
+        }
+        let association_count = usize::from(bytes[pos]);
+        pos += 1;
+        let mut has_hevc = false;
+        let mut dimensions = None;
+        for _ in 0..association_count {
+            let property_index = if flags & 1 != 0 {
+                if pos + 2 > end {
+                    return Ok(streams);
+                }
+                let value = read_u16(bytes, pos)?;
+                pos += 2;
+                usize::from(value & 0x7fff)
+            } else {
+                if pos + 1 > end {
+                    return Ok(streams);
+                }
+                let value = bytes[pos];
+                pos += 1;
+                usize::from(value & 0x7f)
+            };
+            let Some(property) = property_index
+                .checked_sub(1)
+                .and_then(|index| properties.get(index))
+            else {
+                continue;
+            };
+            match *property {
+                HeifProperty::HevcConfig => has_hevc = true,
+                HeifProperty::Ispe { width, height } => dimensions = Some((width, height)),
+                HeifProperty::Other => {}
+            }
+        }
+        if let (true, Some((width, height))) = (has_hevc, dimensions) {
+            streams.push(StreamMetadata::video(
+                streams.len(),
+                "hevc",
+                width,
+                height,
+                None,
+                Some("1/1".to_string()),
+            ));
+        }
+    }
+    Ok(streams)
+}
+
+fn parse_movie_duration(bytes: &[u8]) -> Result<Option<f64>> {
+    let mut pos = 0;
+    while let Ok(Some(header)) = next_box(bytes, pos, bytes.len()) {
+        if &header.name == b"moov" {
+            let mut moov_pos = header.data_start;
+            while let Some(moov_header) = next_box(bytes, moov_pos, header.end)? {
+                if &moov_header.name == b"mvhd" {
+                    return parse_mvhd_duration(&bytes[moov_header.data_start..moov_header.end]);
+                }
+                moov_pos = moov_header.end;
+            }
+        }
+        pos = header.end;
+    }
+    Ok(None)
+}
+
+fn parse_mvhd_duration(data: &[u8]) -> Result<Option<f64>> {
+    if data.len() < 20 {
+        return Ok(None);
+    }
+    let version = data[0];
+    let (timescale, duration) = if version == 1 {
+        if data.len() < 32 {
+            return Ok(None);
+        }
+        (read_u32(data, 20)?, read_u64(data, 24)?)
+    } else {
+        (read_u32(data, 12)?, u64::from(read_u32(data, 16)?))
+    };
+    if timescale == 0 || duration == 0 {
+        Ok(None)
+    } else {
+        Ok(Some(duration as f64 / timescale as f64))
+    }
+}
+
+fn parse_fragment_duration(bytes: &[u8]) -> Result<Option<f64>> {
+    let mut timescale = None;
+    let mut default_sample_duration = None;
+    let mut max_end = 0_u64;
+    let mut pos = 0;
+    while let Ok(Some(header)) = next_box(bytes, pos, bytes.len()) {
+        if &header.name == b"moov" {
+            let (found_timescale, found_duration) =
+                parse_fragment_defaults(bytes, header.data_start, header.end)?;
+            timescale = timescale.or(found_timescale);
+            default_sample_duration = default_sample_duration.or(found_duration);
+        } else if &header.name == b"moof" {
+            let duration = parse_moof_duration(
+                bytes,
+                header.data_start,
+                header.end,
+                default_sample_duration,
+            )?;
+            max_end = max_end.max(duration);
+        }
+        pos = header.end;
+    }
+    match (timescale, max_end) {
+        (Some(timescale), duration) if timescale != 0 && duration != 0 => {
+            Ok(Some(duration as f64 / timescale as f64))
+        }
+        _ => Ok(None),
+    }
+}
+
+fn parse_fragment_defaults(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<(Option<u32>, Option<u32>)> {
+    let mut timescale = None;
+    let mut default_sample_duration = None;
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        match &header.name {
+            b"trak" if timescale.is_none() => {
+                timescale = parse_trak_timescale(bytes, header.data_start, header.end)?;
+            }
+            b"mvex" if default_sample_duration.is_none() => {
+                default_sample_duration =
+                    parse_mvex_default_duration(bytes, header.data_start, header.end)?;
+            }
+            _ => {}
+        }
+        pos = header.end;
+    }
+    Ok((timescale, default_sample_duration))
+}
+
+fn parse_trak_timescale(bytes: &[u8], start: usize, end: usize) -> Result<Option<u32>> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"mdia" {
+            let mut mdia_pos = header.data_start;
+            while let Some(mdia_header) = next_box(bytes, mdia_pos, header.end)? {
+                if &mdia_header.name == b"mdhd" {
+                    return parse_mdhd_timescale(&bytes[mdia_header.data_start..mdia_header.end]);
+                }
+                mdia_pos = mdia_header.end;
+            }
+        }
+        pos = header.end;
+    }
+    Ok(None)
+}
+
+fn parse_mdhd_timescale(data: &[u8]) -> Result<Option<u32>> {
+    if data.len() < 20 {
+        return Ok(None);
+    }
+    match data[0] {
+        0 => Ok(Some(read_u32(data, 12)?)),
+        1 if data.len() >= 32 => Ok(Some(read_u32(data, 20)?)),
+        _ => Ok(None),
+    }
+}
+
+fn parse_mvex_default_duration(bytes: &[u8], start: usize, end: usize) -> Result<Option<u32>> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"trex" && header.data_start + 16 <= header.end {
+            return Ok(Some(read_u32(bytes, header.data_start + 12)?));
+        }
+        pos = header.end;
+    }
+    Ok(None)
+}
+
+fn parse_moof_duration(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    default_sample_duration: Option<u32>,
+) -> Result<u64> {
+    let mut max_end = 0_u64;
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"traf" {
+            max_end = max_end.max(parse_traf_duration(
+                bytes,
+                header.data_start,
+                header.end,
+                default_sample_duration,
+            )?);
+        }
+        pos = header.end;
+    }
+    Ok(max_end)
+}
+
+fn parse_traf_duration(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    default_sample_duration: Option<u32>,
+) -> Result<u64> {
+    let mut base_time = None;
+    let mut default_duration = default_sample_duration;
+    let mut trun_duration = 0_u64;
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        match &header.name {
+            b"tfhd" => {
+                default_duration = parse_tfhd_default_duration(bytes, header, default_duration)?
+            }
+            b"tfdt" => base_time = parse_tfdt_base_time(bytes, header)?,
+            b"trun" => {
+                trun_duration = trun_duration.saturating_add(parse_trun_duration(
+                    bytes,
+                    header,
+                    default_duration,
+                )?);
+            }
+            _ => {}
+        }
+        pos = header.end;
+    }
+    Ok(base_time.unwrap_or(0).saturating_add(trun_duration))
+}
+
+fn parse_tfhd_default_duration(
+    bytes: &[u8],
+    header: BoxHeader,
+    fallback: Option<u32>,
+) -> Result<Option<u32>> {
+    if header.data_start + 8 > header.end {
+        return Ok(fallback);
+    }
+    let flags = read_u24(bytes, header.data_start + 1)?;
+    let mut pos = header.data_start + 8;
+    if flags & 0x000001 != 0 {
+        pos += 8;
+    }
+    if flags & 0x000002 != 0 {
+        pos += 4;
+    }
+    if flags & 0x000008 != 0 && pos + 4 <= header.end {
+        return Ok(Some(read_u32(bytes, pos)?));
+    }
+    Ok(fallback)
+}
+
+fn parse_tfdt_base_time(bytes: &[u8], header: BoxHeader) -> Result<Option<u64>> {
+    if header.data_start + 8 > header.end {
+        return Ok(None);
+    }
+    if bytes[header.data_start] == 1 {
+        if header.data_start + 12 <= header.end {
+            Ok(Some(read_u64(bytes, header.data_start + 4)?))
+        } else {
+            Ok(None)
+        }
+    } else {
+        Ok(Some(u64::from(read_u32(bytes, header.data_start + 4)?)))
+    }
+}
+
+fn parse_trun_duration(
+    bytes: &[u8],
+    header: BoxHeader,
+    default_sample_duration: Option<u32>,
+) -> Result<u64> {
+    if header.data_start + 8 > header.end {
+        return Ok(0);
+    }
+    let flags = read_u24(bytes, header.data_start + 1)?;
+    let sample_count = read_u32(bytes, header.data_start + 4)? as usize;
+    let mut pos = header.data_start + 8;
+    if flags & 0x000001 != 0 {
+        pos += 4;
+    }
+    if flags & 0x000004 != 0 {
+        pos += 4;
+    }
+    let mut duration = 0_u64;
+    for _ in 0..sample_count {
+        if flags & 0x000100 != 0 {
+            if pos + 4 > header.end {
+                break;
+            }
+            duration = duration.saturating_add(u64::from(read_u32(bytes, pos)?));
+            pos += 4;
+        } else if let Some(default_duration) = default_sample_duration {
+            duration = duration.saturating_add(u64::from(default_duration));
+        }
+        if flags & 0x000200 != 0 {
+            pos += 4;
+        }
+        if flags & 0x000400 != 0 {
+            pos += 4;
+        }
+        if flags & 0x000800 != 0 {
+            pos += 4;
+        }
+        if pos > header.end {
+            break;
+        }
+    }
+    Ok(duration)
 }
 
 fn parse_trak(
@@ -606,6 +1029,19 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
         bytes[offset + 2],
         bytes[offset + 3],
     ]))
+}
+
+fn read_u24(bytes: &[u8], offset: usize) -> Result<u32> {
+    let end = offset + 3;
+    if end > bytes.len() {
+        return Err(RmpegError::UnexpectedEof {
+            needed: end,
+            remaining: bytes.len(),
+        });
+    }
+    Ok((u32::from(bytes[offset]) << 16)
+        | (u32::from(bytes[offset + 1]) << 8)
+        | u32::from(bytes[offset + 2]))
 }
 
 fn read_u64(bytes: &[u8], offset: usize) -> Result<u64> {

@@ -19,7 +19,10 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - Ogg/Opus, Ogg/Vorbis, Ogg/Theora, and Ogg/VP8 header metadata probing, including truncated final-page duration handling
 - FLV H.264/AAC sequence-header metadata probing
 - MP4/MOV track metadata probing for H.264/HEVC/MPEG-4 video, AAC/AMR/Vorbis/QuickTime PCM audio, and common QuickTime video sample entries
+- fragmented MP4/MOV duration probing from `moof`/`traf` timing and HEIF/HEIC still-image metadata from item properties
 - CAF audio metadata probing for observed AAC, Opus, and PCM fixtures
+- MPEG-TS program metadata probing for observed MPEG-2 video, H.264, HEVC, VVC, MPEG audio, AAC LATM, AC-3, and Opus fixtures
+- EA VP6 metadata probing for observed Electronic Arts VP6 files
 - raw DNxHD/DNxHR frame metadata probing
 - narrow MXF metadata probing for DNXUC FATE fixtures
 - ASF/WMA Lossless, WMAPro, WMA Voice, MSS2, and G2M metadata probing from ASF header objects
@@ -70,7 +73,7 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - WavPack metadata probing from raw blocks and Matroska tracks
 - BRender PIX and Alias PIX image metadata probing
 
-Compressed decode is not implemented yet. MP3, AC-3, E-AC-3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, CAF, QOA, WavPack, WMA Lossless, WMAPro, WMA Voice, ATRAC1, ATRAC3, ALP/APM ADPCM, RealAudio/RealVideo, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, G.722, G.723.1, PP_BNK, CDXL, VOC, SMJPEG, Bethesda VID, VMD, BFSTM/BRSTM, H.264, HEVC, VVC, VC-1, raw MPEG-4 Visual, raw MPEG video, DNxHD/DNxHR, DNXUC, G2M, Hap, ProRes, QuickTime Animation, DV, VP8, VP9, AV1, FLV, Matroska/WebM, subtitles, DDS, GIF, DPX, FLIC, TXD, FITS, IFF, JPEG XL, PNG/APNG, BMP, BRender PIX, Alias PIX, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+Compressed decode is not implemented yet. MP3, AC-3, E-AC-3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, CAF, QOA, WavPack, WMA Lossless, WMAPro, WMA Voice, ATRAC1, ATRAC3, ALP/APM ADPCM, RealAudio/RealVideo, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, G.722, G.723.1, PP_BNK, CDXL, VOC, SMJPEG, Bethesda VID, VMD, BFSTM/BRSTM, H.264, HEVC, VVC, VC-1, raw MPEG-4 Visual, raw MPEG video, DNxHD/DNxHR, DNXUC, G2M, Hap, ProRes, QuickTime Animation, DV, VP8, VP9, AV1, FLV, Matroska/WebM, MPEG-TS, EA VP6, HEIF/HEIC, subtitles, DDS, GIF, DPX, FLIC, TXD, FITS, IFF, JPEG XL, PNG/APNG, BMP, BRender PIX, Alias PIX, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
@@ -78,7 +81,7 @@ FFmpeg is used as the behavior oracle. This project does not copy or mechanicall
 
 Phase 1 is compatibility: make rmpeg successfully inspect and eventually decode as much of the upstream FFmpeg sample media set as possible, with the site reporting real progress from `site/data/upstream-samples.json`.
 
-Current Phase 1 strict corpus progress is 1783 of 2178 FFmpeg-accepted samples, or 81.864%, on the local upstream sample report.
+Current Phase 1 strict corpus progress is 1829 of 2178 FFmpeg-accepted samples, or 83.976%, on the local upstream sample report.
 
 Phase 2 is optimization. Once Phase 1 is no longer the main blocker, the site should show which older FFmpeg codec paths rmpeg is faster than, using the benchmark JSON instead of hand-written claims.
 

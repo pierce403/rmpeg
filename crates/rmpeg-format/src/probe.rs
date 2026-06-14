@@ -19,7 +19,8 @@ use crate::{
     dfa::{looks_like_dfa, parse_dfa},
     dnxhd::{looks_like_raw_dnxhd, parse_raw_dnxhd},
     dpx::{looks_like_dpx, parse_dpx},
-    dts::{looks_like_mpegts, looks_like_raw_dts, parse_dtshd, parse_mpegts_dts, parse_raw_dts},
+    dts::{looks_like_raw_dts, parse_dtshd, parse_mpegts_dts, parse_raw_dts},
+    ea::{looks_like_ea, parse_ea},
     exr::{looks_like_exr, parse_exr},
     fits::{looks_like_fits, parse_fits},
     flac::parse_flac,
@@ -38,6 +39,7 @@ use crate::{
     mp3::parse_mp3,
     mp4::{looks_like_mp4, parse_mp4},
     mpeg4::{looks_like_mpeg4_visual, parse_mpeg4_visual},
+    mpegts::{looks_like_mpegts, parse_mpegts},
     mpegvideo::{looks_like_mpeg_video, parse_mpeg_video},
     mxf::{looks_like_mxf, parse_mxf},
     ogg::parse_ogg,
@@ -102,6 +104,10 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
 
     if looks_like_flv(bytes) {
         return parse_flv(bytes);
+    }
+
+    if looks_like_ea(bytes) {
+        return parse_ea(bytes);
     }
 
     if looks_like_adts_aac(bytes) {
@@ -193,7 +199,7 @@ pub fn probe(bytes: &[u8]) -> Result<ProbeDocument> {
     }
 
     if looks_like_mpegts(bytes) {
-        return parse_mpegts_dts(bytes);
+        return parse_mpegts(bytes).or_else(|_| parse_mpegts_dts(bytes));
     }
 
     if looks_like_webp(bytes) {

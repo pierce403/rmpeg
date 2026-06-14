@@ -63,7 +63,7 @@ fn sequence_header_start(bytes: &[u8]) -> Option<usize> {
 }
 
 fn find_sequence_header(bytes: &[u8]) -> Option<usize> {
-    let scan = bytes.len().min(8192);
+    let scan = bytes.len().min(1_048_576);
     (0..scan.saturating_sub(3)).find(|&pos| is_sequence_header(bytes, pos))
 }
 

@@ -7,11 +7,20 @@ enum Ac3Kind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct Ac3Info {
+pub(crate) struct Ac3Info {
     kind: Ac3Kind,
-    sample_rate: u32,
-    channels: u16,
-    bitrate: u32,
+    pub(crate) sample_rate: u32,
+    pub(crate) channels: u16,
+    pub(crate) bitrate: u32,
+}
+
+impl Ac3Info {
+    pub(crate) fn codec_name(self) -> &'static str {
+        match self.kind {
+            Ac3Kind::Ac3 => "ac3",
+            Ac3Kind::Eac3 => "eac3",
+        }
+    }
 }
 
 pub fn parse_raw_ac3_or_eac3(bytes: &[u8]) -> Result<ProbeDocument> {
@@ -26,6 +35,11 @@ pub fn parse_raw_ac3_or_eac3_scanning(bytes: &[u8]) -> Result<ProbeDocument> {
 
 pub fn looks_like_raw_ac3_or_eac3(bytes: &[u8]) -> bool {
     bytes.starts_with(&[0x0b, 0x77]) && parse_info_at(bytes, 0).is_some()
+}
+
+pub(crate) fn find_ac3_info(bytes: &[u8]) -> Option<Ac3Info> {
+    let sync = find_sync(bytes)?;
+    parse_info_at(bytes, sync)
 }
 
 fn parse_raw_ac3_or_eac3_from_sync(bytes: &[u8], sync: usize) -> Result<ProbeDocument> {

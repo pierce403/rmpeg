@@ -197,3 +197,13 @@
 - Raw ADTS AAC may have leading junk before the first sync and an ID3v1 tag at the end. Accept leading junk only when a candidate ADTS header has a plausible following frame, and ignore a truncated final frame only after at least one complete frame. Scanning arbitrary AAC payload bits for SBR sync extensions caused false sample-rate changes in ordinary AAC frames, so leave HE-AAC ADTS as an honest remaining metadata gap until the parser can identify the extension deliberately.
 
 - Raw MPEG video sequence headers can advertise `bit_rate_value == 25000`, which maps to 10 Mbps CPB-style metadata on the closed-caption `.m2v` fixture. Local ffprobe reports no stream duration for that file, so rmpeg should not turn that header value into a byte-size duration estimate.
+
+- MPEG-TS PMTs can list the same PID more than once. In the observed AC-3 fixture, a private descriptor tag `0x6a` should override an earlier generic MPEG-audio-looking mapping for that PID. For audio duration, local ffprobe usually reports PTS span plus one compressed frame: MPEG audio uses the parsed frame sample count, AAC LATM uses 1024 samples at 48 kHz in the observed files, and AC-3 uses 1536 samples at the parsed sample rate.
+
+- HEIF/HEIC still images can have no `trak` streams at all. The useful metadata lives in top-level `meta` item properties: `ipco` carries `hvcC` and `ispe`, while `ipma` associates those properties with image items. Some fixtures have one HEVC config but multiple image items, so every item associated with both properties should become a still HEVC stream.
+
+- Fragmented MP4/MOV files often leave `mdhd` duration at zero. For the observed fragments, stream duration comes from `tfdt` base decode time plus `trun` sample durations, falling back through `tfhd` and `trex` defaults. Some PIFF/MOV files report a shorter movie-level duration than the track duration, so clamp to `mvhd` only when it is nonzero and shorter.
+
+- AVI partial `movi` LIST sizes can extend beyond EOF. Counting observed stream chunks needs a tolerant chunk walk, but raw chunk count still is not a complete duration oracle for all Fraps and screen-codec partial captures because ffprobe also accounts for codec- or packet-level validity.
+
+- Electronic Arts VP6 chunks use total chunk size, not payload size. The observed `MVhd`/`AVhd` headers store padded dimensions that round up to multiples of 16 and derive duration from a fixed-point fps field at data offset 16. `SCHl` audio headers in the same family can signal `adpcm_ea_r3` at 32 kHz stereo even when decode remains unimplemented.
