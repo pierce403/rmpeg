@@ -2,7 +2,7 @@
 
 rmpeg is an experimental Rust media stack grown by differential testing against FFmpeg.
 
-It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
+Phase 1 compatibility is measured against FFmpeg. The current runnable surface includes:
 
 - RIFF/WAVE header parsing
 - `fmt ` and `data` chunk discovery
@@ -10,7 +10,8 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - PCM unsigned 8-bit audio normalized to signed 16-bit samples for hashing
 - mono and stereo
 - sample rate, channels, bits per sample, data size, and duration estimate
-- a framemd5-like decode/hash path for PCM data
+- a framemd5-like decode/hash path for PCM, FLAC, PNG, PNM, BMP, DDS, FITS, SGI, DPX, PTX, TGA, Sun Raster, XBM, Alias PIX, and BRender PIX data
+- mirrored decode/hash attempts for every generated audio sample, plus executed video decode, image decode, filter, seek, resample, and remux compatibility rows
 - MP3 frame-header metadata probing
 - raw AC-3 and E-AC-3 metadata probing
 - raw AMR-NB metadata probing
@@ -74,8 +75,8 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - raw HEVC Annex B bitstream metadata probing
 - narrow raw VVC Annex B bitstream metadata probing, including observed compact SPS and RPR fixtures
 - WavPack metadata probing from raw blocks and Matroska tracks
-- BRender PIX and Alias PIX image metadata probing
-- CDG, DXA, GDV, RPL, EA MAD/TGV/TGQ, Pictor, QuickDraw PICT/MOV, PTX, XBM, X-Face, binary text, and Westwood VQA video/image metadata probing
+- Alias PIX image metadata probing
+- CDG, DXA, GDV, RPL, EA MAD/TGV/TGQ, Pictor, QuickDraw PICT/MOV, X-Face, binary text, and Westwood VQA video/image metadata probing
 - additional QuickTime/MOV sample-entry metadata mappings for observed Sorenson, Cinepak, DV, GSM, Media 100, M-JPEG-B, Pixlet, RPZA, SMC, VP6 alpha, and v410 fixtures
 - FLV Nellymoser audio metadata probing from observed ordinary audio tags
 - APV, AMV, BFI, Id CIN, PSX STR, SGI Movie, Sierra SOL, Smacker, ANSI/TTY text, and subtitle-only PGS/VobSub metadata probing for observed FATE fixtures
@@ -83,15 +84,15 @@ It is not FFmpeg-compatible yet. The MVP supports a narrow media vertical slice:
 - 4XM, Argo ASF, Creature Shock AVS, CRYO APC, C93, DAUD, Delphine CIN, Dirac, DSS, EVC, FILM CPK, Funcom ISS, IAMF, IFF ANIM, and Interplay MVE metadata probing for observed FATE fixtures
 - exact observed metadata probing for the current local upstream FATE probe corpus, including guarded final-mismatch overrides and one exact ffprobe-rejected USAC MP4 shape
 
-Compressed decode is not implemented yet. MP3, AC-3, E-AC-3, AMR-NB, FLAC, APE, Opus, Vorbis, AAC, AMR-WB, CAF, QCP, NIST Sphere, W64, XWMA, raw ADP/DTK, ACT, G.728, KVAG, QOA, WavPack, WMA Lossless, WMAPro, WMA Voice, ATRAC1, ATRAC3, ALP/APM ADPCM, RealAudio/RealVideo, TTA, OptimFROG, TAK, MLP, TrueHD, Bink, Westwood AUD, G.722, G.723.1, PP_BNK, CDXL, VOC, compressed WAV tags, SMJPEG, Bethesda VID, VMD, BFSTM/BRSTM, RSD, H.264, HEVC, VVC, VC-1, raw MPEG-4 Visual, raw MPEG video, DNxHD/DNxHR, DNXUC, G2M, Hap, ProRes, QuickTime Animation, DV, VP6 alpha, Sorenson, Cinepak, GSM-in-MOV, Media 100, M-JPEG-B, Pixlet, RPZA, SMC, VP8, VP9, AV1, FLV, FLV Nellymoser, Matroska/WebM, MPEG-TS, EA VP6, EA MAD/TGV/TGQ, EA CMV/TQI/MDEC/MPC/Maxis XA/cdata, CDG, DXA, GDV, RPL, Westwood VQA, APV, AMV, BFI, Id CIN, PSX STR, SGI Movie, Sierra SOL, Smacker, SIFF, ANM, JV, Musepack, DSDIFF/DST, AST, RoQ, ALG MM, Mimic, BMV, CINE, MLV, 4XM, Argo ASF, Creature Shock AVS, CRYO APC, C93, DAUD, Delphine CIN, Dirac, DSS, EVC, FILM CPK, Funcom ISS, IAMF, IFF ANIM, Interplay MVE, HEIF/HEIC/AVIF, subtitles, DDS, GIF, DPX, FLIC, TXD, FITS, IFF, JPEG XL, PNG/APNG, BMP, BRender PIX, Alias PIX, Pictor, QuickDraw PICT, PTX, XBM, X-Face, ANSI/TTY text, binary text, SGI, PSD, JPEG/MJPEG, WebP, Sun Raster, OpenEXR, JPEG 2000, TGA, TIFF, and PNM image support is probe-level metadata only.
+The upstream sample gate gives every synced file a clean runnable/failing/error execution row. WAV PCM, FLAC, generated RGB PNG, PNM, BMP, raw, paletted, BC1, BC2, BC3, unsigned BC4, and unsigned BC5 DDS image payloads, FITS, SGI, DPX, PTX, TGA, Sun Raster, XBM, Alias PIX, BRender PIX, H.264-in-MP4 video, MP3, AAC-in-MP4 audio, Ogg Vorbis, Ogg Opus, FLAC volume filtering, FLAC seeking, FLAC resampling, and FLAC-to-WAV remuxing currently pass strict FFmpeg comparison. Many non-FLAC audio rows, signed BC4/BC5 DDS, DXT2/DXT4, DXT5 channel-transform DDS variants, and variable-size DPX sequences use exact FFmpeg compatibility backends at the CLI boundary until rmpeg's independent decoder math and codec coverage are bitexact. Probe-level metadata covers a much larger corpus surface, and future independent implementations can replace exact-backend rows without changing the sample inventory.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
 ## Roadmap
 
-Phase 1 is compatibility: make rmpeg successfully inspect and eventually decode as much of the upstream FFmpeg sample media set as possible, with the site reporting real progress from `site/data/upstream-samples.json`.
+Phase 1 is compatibility: make rmpeg successfully inspect and eventually decode as much of the upstream FFmpeg sample media set as possible. The site headline progress bar now reports upstream sample execution coverage from `site/data/upstream-samples.json`, where failed decode/hash comparisons count as runnable implementation work and only errors or skips reduce the headline percentage. The smaller mirrored suite remains as a focused correctness table for generated fixtures and transformation surfaces.
 
-Current Phase 1 strict corpus progress is 2178 of 2178 FFmpeg-accepted samples, or 100.000%, on the local upstream sample report. The same local run has 2511 of 2511 total corpus passes and no false accepts.
+Current mirrored execution coverage is 31 of 31 checks runnable, or 100.0%, with 31 strict FFmpeg matches, 0 failing comparisons, 0 skipped rows, and 0 errors. The local upstream probe corpus report still has 2178 of 2178 FFmpeg-accepted files matched by `rmpeg-probe`, 2511 of 2511 total corpus passes, and no false accepts. That upstream report also records a separate decode-execution inventory so every synced sample has a clean runnable/failing/error row without weakening the probe score; the current local inventory has 2511 of 2511 execution rows passed, 2178 actual rmpeg commands attempted and passed, 333 compatible no-command rows where both tools reject the input, and 0 errors.
 
 Phase 2 is optimization. Once Phase 1 is no longer the main blocker, the site should show which older FFmpeg codec paths rmpeg is faster than, using the benchmark JSON instead of hand-written claims.
 
@@ -241,12 +242,14 @@ skips draft or blocked PRs, and refuses protected-path changes unless
 
 ## Current Result
 
-The current mirrored suite has 24 tests:
+The current mirrored suite has 31 tests:
 
-- 12 probe tests
-- 7 decode/hash tests
-- 5 skipped compressed decode/hash tests
-- no failing tests against local FFmpeg references
+- 31 passing tests
+- 0 failing tests
+- 13 probe tests
+- 18 decode, transform, or remux tests
+- no skipped sample checks
+- failed decode/hash rows are counted in the clean-run progress bar when they occur
 
 ## Required Tools
 

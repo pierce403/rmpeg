@@ -62,8 +62,8 @@ fn print_help() {
     println!("  site       render site/dist/index.html");
     println!("  ffprobe-oracle        build the pinned ffprobe oracle for upstream samples");
     println!("  ffmpeg-samples-sync   sync upstream FFmpeg FATE samples with make fate-rsync");
-    println!("  ffmpeg-samples-check  probe the synced FFmpeg FATE sample corpus");
-    println!("  ffmpeg-samples        sync and probe the FFmpeg FATE sample corpus");
+    println!("  ffmpeg-samples-check  probe the synced FFmpeg FATE corpus and inventory decode execution");
+    println!("  ffmpeg-samples        sync, probe, and inventory the FFmpeg FATE sample corpus");
 }
 
 fn build_release() -> io::Result<()> {

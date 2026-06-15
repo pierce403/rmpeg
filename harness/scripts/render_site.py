@@ -20,12 +20,13 @@ def main():
     correctness = read_json(CORRECTNESS, empty_correctness())
     benchmark_summary = read_json(BENCH_SUMMARY, empty_benchmarks())
     upstream_samples = read_json(UPSTREAM_SAMPLES, empty_upstream_samples())
+    phase_stats = phase_run_stats(correctness, upstream_samples)
     rendered = TEMPLATE.read_text()
     replacements = {
         "generated_at": escape(correctness.get("generated_at", "unknown")),
-        "og_description": escape(phase_description(upstream_samples)),
+        "og_description": escape(phase_description(phase_stats)),
         "current_status": render_current_status(correctness),
-        "phase_progress": render_phase_progress(upstream_samples),
+        "phase_progress": render_phase_progress(phase_stats),
         "correctness": render_correctness(correctness),
         "upstream_samples": render_upstream_samples(upstream_samples),
         "benchmarks": render_benchmarks(benchmark_summary),
@@ -37,7 +38,7 @@ def main():
     DIST.mkdir(parents=True, exist_ok=True)
     (DIST / "index.html").write_text(rendered)
     copy_static_files()
-    write_og_card(DIST / "og-card.png", upstream_samples)
+    write_og_card(DIST / "og-card.png", phase_stats)
     print(f"wrote {DIST / 'index.html'}")
 
 
@@ -81,42 +82,57 @@ def render_current_status(correctness):
         status_row("FLAC metadata", tests, "probe-json", "probe flac"),
         status_row("FLAC decode/hash", tests, "framemd5", "decode/hash flac"),
         status_row("Ogg audio metadata", tests, "probe-json", "probe ogg"),
-        status_row("Ogg audio decode/hash", tests, "framemd5", "decode/hash ogg"),
+        status_row("Ogg Vorbis decode/hash", tests, "framemd5", "decode/hash ogg tone_vorbis"),
+        status_row("Ogg Opus decode/hash", tests, "framemd5", "decode/hash ogg tone_opus"),
         status_row("MP4/MOV metadata", tests, "probe-json", "probe mp4"),
         status_row("H.264/AAC metadata", tests, "probe-json", "probe mp4"),
         status_row("H.264/AAC decode/hash", tests, "framemd5", "decode/hash mp4"),
-        ("Filters", "not started", "not-started"),
+        status_row("Video decode/hash", tests, "framemd5", "decode/video"),
+        status_row("Image decode/hash", tests, "framemd5", "decode/image"),
+        status_row("Audio filters", tests, "filter", "filter audio"),
+        status_row("Seeking", tests, "seek", "seek audio"),
+        status_row("Resampling", tests, "resample", "resample audio"),
+        status_row("Remuxing", tests, "remux", "remux"),
     ]
     return table(["Area", "Status"], rows)
 
 
-def render_phase_progress(report):
-    stats = phase_stats(report)
-    media_total = stats["media_total"]
-    media_passed = stats["media_passed"]
+def render_phase_progress(stats):
+    total = stats["total"]
+    runnable = stats["runnable"]
+    passed = stats["passed"]
+    failed = stats["failed"]
+    errors = stats["errors"]
+    skipped = stats["skipped"]
     percent = stats["percent"]
-    summary = report.get("summary", {})
-    tests = report.get("tests", [])
-    if media_total == 0:
+    if total == 0:
         return (
             '<section class="phase-panel" aria-labelledby="phase-1-title">'
             '<div class="phase-row"><div>'
             '<p class="phase-kicker">Phase 1</p>'
-            '<h2 id="phase-1-title">Sample Media Progress</h2>'
-            "<p>No upstream FFmpeg sample media report has been generated yet.</p>"
+            f'<h2 id="phase-1-title">{escape(stats["headline"])}</h2>'
+            f"<p>{escape(stats['no_data'])}</p>"
             "</div></div></section>"
         )
 
-    total_files = int(summary.get("total", len(tests)) or 0)
-    ffprobe_accepted = int(summary.get("ffprobe_accepted", media_total) or 0)
-    corpus_passed = int(summary.get("passed", 0) or 0)
+    comparison_sentence = (
+        f"All {passed} rows pass the current FFmpeg compatibility check."
+        if failed == 0 and errors == 0 and skipped == 0
+        else f"Failed comparisons stay red but count as runnable; {passed} rows currently pass."
+    )
+    attempted = stats.get("attempted")
+    attempted_metric = (
+        f"<span><strong>{attempted}</strong> commands attempted</span>"
+        if attempted is not None
+        else ""
+    )
     return f"""
       <section class="phase-panel" aria-labelledby="phase-1-title">
         <div class="phase-row">
           <div>
             <p class="phase-kicker">Phase 1</p>
-            <h2 id="phase-1-title">Sample Media Progress</h2>
-            <p>rmpeg can currently inspect {media_passed} of {media_total} FFmpeg-accepted sample media files in the upstream FATE corpus.</p>
+            <h2 id="phase-1-title">{escape(stats["headline"])}</h2>
+            <p>rmpeg currently gives {runnable} of {total} {escape(stats["scope"])} a clean execution row. {comparison_sentence}</p>
           </div>
           <div class="phase-percent">{percent:.1f}%</div>
         </div>
@@ -124,38 +140,80 @@ def render_phase_progress(report):
           <div class="phase-progress-fill" style="width: {percent:.1f}%"></div>
         </div>
         <div class="phase-metrics">
-          <span><strong>{media_passed}</strong> media matches</span>
-          <span><strong>{ffprobe_accepted}</strong> FFmpeg-accepted media files</span>
-          <span><strong>{corpus_passed}</strong> total corpus passes</span>
-          <span><strong>{total_files}</strong> files checked</span>
+          <span><strong>{runnable}</strong> runnable</span>
+          <span><strong>{passed}</strong> passed rows</span>
+          <span><strong>{failed}</strong> failed comparisons</span>
+          <span><strong>{errors}</strong> errors</span>
+          <span><strong>{skipped}</strong> skipped</span>
+          {attempted_metric}
+          <span><strong>{total}</strong> {escape(stats["total_label"])}</span>
         </div>
       </section>
     """
 
 
-def phase_description(report):
-    stats = phase_stats(report)
-    if stats["media_total"] == 0:
-        return "Phase 1: sample media progress has not been measured yet."
+def phase_description(stats):
+    if stats["total"] == 0:
+        return "Phase 1: sample execution progress has not been measured yet."
     return (
-        f"Phase 1: rmpeg currently matches {stats['media_passed']} of "
-        f"{stats['media_total']} FFmpeg-accepted sample media files "
-        f"({stats['percent']:.1f}%)."
+        f"Phase 1: rmpeg currently gives {stats['runnable']} of "
+        f"{stats['total']} {stats['scope']} a clean execution row "
+        f"({stats['percent']:.1f}% execution coverage); "
+        f"{stats['passed']} pass the current FFmpeg compatibility check."
     )
 
 
-def phase_stats(report):
-    tests = report.get("tests", [])
-    media_total = sum(1 for test in tests if test.get("ffprobe_returncode") == 0)
-    media_passed = sum(
-        1
-        for test in tests
-        if test.get("ffprobe_returncode") == 0 and test.get("status") == "passed"
+def phase_run_stats(correctness, upstream_samples):
+    decode_summary = upstream_samples.get("decode_execution_summary") or {}
+    upstream_total = int(decode_summary.get("total", 0) or 0)
+    if upstream_total:
+        clean = int(decode_summary.get("clean", 0) or 0)
+        return {
+            "source": "upstream",
+            "headline": "Upstream Sample Execution Progress",
+            "scope": "synced upstream sample files",
+            "total_label": "upstream samples",
+            "no_data": "No upstream sample execution report has been generated yet.",
+            "total": upstream_total,
+            "runnable": clean,
+            "passed": int(decode_summary.get("passed", 0) or 0),
+            "failed": int(decode_summary.get("failed", 0) or 0),
+            "errors": int(decode_summary.get("errors", 0) or 0),
+            "skipped": int(decode_summary.get("skipped", 0) or 0),
+            "attempted": int(decode_summary.get("attempted", 0) or 0),
+            "percent": clean / upstream_total * 100,
+        }
+    stats = clean_run_stats(correctness)
+    stats.update(
+        {
+            "source": "mirrored",
+            "headline": "Mirrored Sample Execution Progress",
+            "scope": "mirrored sample checks",
+            "total_label": "mirrored checks",
+            "no_data": "No mirrored correctness report has been generated yet.",
+            "attempted": None,
+        }
     )
-    percent = media_passed / media_total * 100 if media_total else 0.0
+    return stats
+
+
+def clean_run_stats(correctness):
+    summary = correctness.get("summary", {})
+    tests = correctness.get("tests", [])
+    total = int(summary.get("total", len(tests)) or 0)
+    passed = int(summary.get("passed", 0) or 0)
+    failed = int(summary.get("failed", 0) or 0)
+    errors = int(summary.get("errors", 0) or 0)
+    skipped = int(summary.get("skipped", 0) or 0)
+    runnable = passed + failed
+    percent = runnable / total * 100 if total else 0.0
     return {
-        "media_total": media_total,
-        "media_passed": media_passed,
+        "total": total,
+        "runnable": runnable,
+        "passed": passed,
+        "failed": failed,
+        "errors": errors,
+        "skipped": skipped,
         "percent": percent,
     }
 
@@ -171,18 +229,14 @@ def status_row(label, tests, kind, prefix):
 
 def ratio(tests):
     if not tests:
-        return "not started"
-    if all(test.get("status") == "skipped" for test in tests):
-        return "not implemented"
+        return "0/0 passing"
     passed = sum(1 for test in tests if test.get("status") == "passed")
     return f"{passed}/{len(tests)} passing"
 
 
 def status_class(tests):
     if not tests:
-        return "not-started"
-    if all(test.get("status") == "skipped" for test in tests):
-        return "not-started"
+        return "failed"
     if any(test.get("status") in {"failed", "error"} for test in tests):
         return "failed"
     if all(test.get("status") == "passed" for test in tests):
@@ -202,7 +256,7 @@ def render_correctness(correctness):
             )
         )
     if not rows:
-        rows.append(("No mirrored tests have been run.", "", badge("skipped"), ""))
+        rows.append(("No mirrored tests have been run.", "", badge("error"), ""))
     return table(["Test", "Kind", "Status", "Details"], rows)
 
 
@@ -225,6 +279,7 @@ def render_benchmarks(summary):
 
 def render_upstream_samples(report):
     summary = report.get("summary", {})
+    decode_summary = report.get("decode_execution_summary")
     total = int(summary.get("total", 0) or 0)
     if total == 0:
         return (
@@ -243,8 +298,37 @@ def render_upstream_samples(report):
         ("Failed", str(summary.get("failed", 0))),
         ("Errors", str(summary.get("errors", 0))),
     ]
+    if decode_summary:
+        decode_tests = report.get("decode_execution_tests", [])
+        command_successes = sum(
+            1
+            for test in decode_tests
+            if test.get("status") == "passed" and test.get("rmpeg_returncode") == 0
+        )
+        compatible_rejections = sum(
+            1
+            for test in decode_tests
+            if test.get("status") == "passed" and test.get("rmpeg_returncode") is None
+        )
+        rows.extend(
+            [
+                ("Decode execution clean rows", str(decode_summary.get("clean", 0))),
+                ("Decode execution passed rows", str(decode_summary.get("passed", 0))),
+                ("Decode execution total rows", str(decode_summary.get("total", 0))),
+                ("Decode commands attempted", str(decode_summary.get("attempted", 0))),
+                ("Decode commands passed", str(command_successes)),
+                ("Compatible no-command rows", str(compatible_rejections)),
+                ("Decode clean failures", str(decode_summary.get("failed", 0))),
+                ("Decode execution errors", str(decode_summary.get("errors", 0))),
+            ]
+        )
     failures = [
         test for test in report.get("tests", []) if test.get("status") in {"failed", "error"}
+    ][:25]
+    decode_errors = [
+        test
+        for test in report.get("decode_execution_tests", [])
+        if test.get("status") == "error"
     ][:25]
     failure_rows = [
         (
@@ -256,7 +340,28 @@ def render_upstream_samples(report):
     ]
     if not failure_rows:
         failure_rows.append(("No failures in the upstream corpus probe run.", badge("passed"), ""))
-    return table(["Metric", "Value"], rows) + table(["Sample", "Status", "Details"], failure_rows)
+    rendered = table(["Metric", "Value"], rows) + table(["Sample", "Status", "Details"], failure_rows)
+    if decode_summary:
+        decode_rows = [
+            (
+                escape(test.get("name", "")),
+                escape(test.get("command_surface", "")),
+                badge(test.get("status", "unknown")),
+                escape(test.get("details", "")),
+            )
+            for test in decode_errors
+        ]
+        if not decode_rows:
+            decode_rows.append(
+                (
+                    "No decode execution errors in the upstream corpus run.",
+                    "",
+                    badge("passed"),
+                    "",
+                )
+            )
+        rendered += table(["Sample", "Surface", "Status", "Details"], decode_rows)
+    return rendered
 
 
 def render_known_failures(correctness):
@@ -266,7 +371,7 @@ def render_known_failures(correctness):
         if test.get("status") in {"failed", "error", "skipped"}
     ]
     if not failures:
-        return "<p>No mirrored failures in the current slice. Unimplemented decode paths are reported as skipped.</p>"
+        return "<p>No mirrored failures in the current slice. Every mirrored check is running cleanly.</p>"
     items = []
     for test in failures:
         items.append(
@@ -292,7 +397,7 @@ def table(headers, rows):
     body_rows = []
     for row in rows:
         row_class = ""
-        if row and isinstance(row[-1], str) and row[-1] in {"passed", "failed", "not-started"}:
+        if row and isinstance(row[-1], str) and row[-1] in {"passed", "failed"}:
             row_class = f' class="{row[-1]}"'
             row = row[:-1]
         cells = "".join(f"<td>{cell}</td>" for cell in row)
@@ -317,7 +422,7 @@ def escape(value):
     return html.escape(str(value), quote=True)
 
 
-def write_og_card(path, report):
+def write_og_card(path, stats):
     width = 1200
     height = 630
     background = (247, 247, 242)
@@ -328,20 +433,20 @@ def write_og_card(path, report):
     border = (199, 203, 194)
     pixels = bytearray(background * (width * height))
 
-    stats = phase_stats(report)
-    media_total = stats["media_total"]
-    media_passed = stats["media_passed"]
+    total = stats["total"]
+    runnable = stats["runnable"]
     percent = stats["percent"]
 
     draw_text(pixels, width, height, 80, 72, "RMPEG", 13, ink)
     draw_text(pixels, width, height, 84, 178, "PHASE 1", 6, green)
-    draw_text(pixels, width, height, 80, 246, "SAMPLE MEDIA PROGRESS", 7, ink)
-    if media_total:
+    draw_text(pixels, width, height, 80, 246, "SAMPLE EXECUTION", 7, ink)
+    if total:
         draw_text(pixels, width, height, 80, 338, f"{percent:.1f}%", 13, green)
-        metric = f"{media_passed} / {media_total} MEDIA FILES"
+        noun = "SAMPLES" if stats.get("source") == "upstream" else "CHECKS"
+        metric = f"{runnable} / {total} {noun} CLEAN"
     else:
         draw_text(pixels, width, height, 80, 338, "NO DATA", 13, green)
-        metric = "RUN CARGO XTASK FFMPEG SAMPLES"
+        metric = "RUN CARGO XTASK SITE"
 
     bar_x = 80
     bar_y = 478

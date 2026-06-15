@@ -4,6 +4,7 @@ import shutil
 import struct
 import subprocess
 import wave
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -93,14 +94,40 @@ def main():
     write_odd_chunks(SAMPLES / "odd_chunks.wav")
     write_pcm_u8(SAMPLES / "pcm_u8.wav", 8000, 1, 800)
     (SAMPLES / "truncated_riff.wav").write_bytes(b"RIFF\x08\x00\x00\x00WAVEfmt ")
+    write_png_sample(SAMPLES / "tiny_rgb.png")
     write_compressed_samples()
     print(f"generated samples in {SAMPLES}")
 
 
 def clean_generated_samples():
-    for pattern in ("*.wav", "*.mp3", "*.mp4", "*.flac", "*.ogg"):
+    for pattern in ("*.wav", "*.mp3", "*.mp4", "*.flac", "*.ogg", "*.png"):
         for path in SAMPLES.glob(pattern):
             path.unlink()
+
+
+def write_png_sample(path):
+    width = 2
+    height = 2
+    rows = [
+        bytes([0, 255, 0, 0, 0, 255, 0]),
+        bytes([0, 0, 0, 255, 255, 255, 255]),
+    ]
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    payload = (
+        png_chunk(b"IHDR", ihdr)
+        + png_chunk(b"IDAT", zlib.compress(b"".join(rows), 9))
+        + png_chunk(b"IEND", b"")
+    )
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + payload)
+
+
+def png_chunk(tag, payload):
+    return (
+        struct.pack(">I", len(payload))
+        + tag
+        + payload
+        + struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF)
+    )
 
 
 def write_compressed_samples():

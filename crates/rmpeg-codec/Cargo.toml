@@ -8,5 +8,10 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+libc = "0.2.186"
+openh264 = { version = "0.9.3", default-features = false, features = ["libloading"] }
+opus-decoder = "0.1.1"
+png = "0.18.1"
 rmpeg-core = { path = "../rmpeg-core" }
 rmpeg-format = { path = "../rmpeg-format" }
+symphonia = { version = "0.6.0", default-features = false, features = ["aac", "flac", "id3v1", "id3v2", "isomp4", "mp3", "ogg", "vorbis"] }

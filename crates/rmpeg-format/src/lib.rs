@@ -176,7 +176,9 @@ pub use mimic::parse_mimic_cam;
 pub use mlp::parse_mlp_or_truehd;
 pub use mlv::parse_mlv;
 pub use mp3::parse_mp3;
-pub use mp4::parse_mp4;
+pub use mp4::{
+    extract_mp4_h264_samples, parse_mp4, parse_mp4_video_timing, Mp4H264SampleData, Mp4VideoTiming,
+};
 pub use mpeg4::parse_mpeg4_visual;
 pub use mpegts::parse_mpegts;
 pub use mpegvideo::parse_mpeg_video;

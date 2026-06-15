@@ -8,6 +8,25 @@ struct BoxHeader {
     end: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mp4VideoTiming {
+    pub frame_count: usize,
+    pub frame_rate_num: u32,
+    pub frame_rate_den: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mp4H264SampleData {
+    pub width: u32,
+    pub height: u32,
+    pub frame_rate_num: u32,
+    pub frame_rate_den: u32,
+    pub length_size: usize,
+    pub sps: Vec<Vec<u8>>,
+    pub pps: Vec<Vec<u8>>,
+    pub samples: Vec<Vec<u8>>,
+}
+
 #[derive(Debug, Default)]
 struct TrackBuilder {
     handler: Option<[u8; 4]>,
@@ -19,6 +38,25 @@ struct TrackBuilder {
     bits_per_sample: Option<u16>,
     width: Option<u32>,
     height: Option<u32>,
+}
+
+#[derive(Debug, Default)]
+struct H264SampleTable {
+    width: Option<u32>,
+    height: Option<u32>,
+    length_size: Option<usize>,
+    sps: Vec<Vec<u8>>,
+    pps: Vec<Vec<u8>>,
+    sample_sizes: Vec<usize>,
+    chunk_offsets: Vec<u64>,
+    sample_to_chunks: Vec<SampleToChunk>,
+    stts: Option<(usize, u64)>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SampleToChunk {
+    first_chunk: u32,
+    samples_per_chunk: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -145,6 +183,567 @@ fn parse_moov(bytes: &[u8], start: usize, end: usize) -> Result<Vec<StreamMetada
         pos = header.end;
     }
     Ok(streams)
+}
+
+pub fn parse_mp4_video_timing(bytes: &[u8]) -> Result<Option<Mp4VideoTiming>> {
+    if !looks_like_mp4(bytes) {
+        return Ok(None);
+    }
+
+    let mut pos = 0;
+    while let Ok(Some(header)) = next_box(bytes, pos, bytes.len()) {
+        if &header.name == b"moov" {
+            let mut moov_pos = header.data_start;
+            while let Some(moov_header) = next_box(bytes, moov_pos, header.end)? {
+                if &moov_header.name == b"trak"
+                    && trak_handler(bytes, moov_header.data_start, moov_header.end)?
+                        == Some(*b"vide")
+                {
+                    return parse_trak_video_timing(bytes, moov_header.data_start, moov_header.end);
+                }
+                moov_pos = moov_header.end;
+            }
+        }
+        pos = header.end;
+    }
+
+    Ok(None)
+}
+
+pub fn extract_mp4_h264_samples(bytes: &[u8]) -> Result<Option<Mp4H264SampleData>> {
+    if !looks_like_mp4(bytes) {
+        return Ok(None);
+    }
+
+    let mut pos = 0;
+    while let Ok(Some(header)) = next_box(bytes, pos, bytes.len()) {
+        if &header.name == b"moov" {
+            let mut moov_pos = header.data_start;
+            while let Some(moov_header) = next_box(bytes, moov_pos, header.end)? {
+                if &moov_header.name == b"trak"
+                    && trak_handler(bytes, moov_header.data_start, moov_header.end)?
+                        == Some(*b"vide")
+                {
+                    let samples =
+                        parse_trak_h264_samples(bytes, moov_header.data_start, moov_header.end)?;
+                    if samples.is_some() {
+                        return Ok(samples);
+                    }
+                }
+                moov_pos = moov_header.end;
+            }
+        }
+        pos = header.end;
+    }
+
+    Ok(None)
+}
+
+fn parse_trak_video_timing(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<Option<Mp4VideoTiming>> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"mdia" {
+            let timescale = parse_trak_timescale(bytes, start, end)?;
+            let stts = parse_mdia_stts(bytes, header.data_start, header.end)?;
+            return Ok(match (timescale, stts) {
+                (Some(timescale), Some((frame_count, duration))) if timescale != 0 => {
+                    mp4_video_timing(frame_count, duration, timescale)
+                }
+                _ => None,
+            });
+        }
+        pos = header.end;
+    }
+    Ok(None)
+}
+
+fn parse_trak_h264_samples(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<Option<Mp4H264SampleData>> {
+    let timescale = parse_trak_timescale(bytes, start, end)?;
+    let mut table = H264SampleTable::default();
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"mdia" {
+            parse_mdia_h264_sample_table(bytes, header.data_start, header.end, &mut table)?;
+        }
+        pos = header.end;
+    }
+
+    let Some(width) = table.width else {
+        return Ok(None);
+    };
+    let Some(height) = table.height else {
+        return Ok(None);
+    };
+    let Some(length_size) = table.length_size else {
+        return Ok(None);
+    };
+    if table.sps.is_empty() || table.pps.is_empty() {
+        return Ok(None);
+    }
+    let samples = assemble_chunk_samples(
+        bytes,
+        &table.sample_sizes,
+        &table.chunk_offsets,
+        &table.sample_to_chunks,
+    )?;
+    if samples.is_empty() {
+        return Ok(None);
+    }
+
+    let (frame_rate_num, frame_rate_den) = match (timescale, table.stts) {
+        (Some(timescale), Some((frame_count, duration))) if timescale != 0 => {
+            match mp4_video_timing(frame_count, duration, timescale) {
+                Some(timing) => (timing.frame_rate_num, timing.frame_rate_den),
+                None => (25, 1),
+            }
+        }
+        _ => (25, 1),
+    };
+
+    Ok(Some(Mp4H264SampleData {
+        width,
+        height,
+        frame_rate_num,
+        frame_rate_den,
+        length_size,
+        sps: table.sps,
+        pps: table.pps,
+        samples,
+    }))
+}
+
+fn parse_mdia_h264_sample_table(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    table: &mut H264SampleTable,
+) -> Result<()> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"minf" {
+            parse_minf_h264_sample_table(bytes, header.data_start, header.end, table)?;
+        }
+        pos = header.end;
+    }
+    Ok(())
+}
+
+fn parse_minf_h264_sample_table(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    table: &mut H264SampleTable,
+) -> Result<()> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"stbl" {
+            parse_stbl_h264_sample_table(bytes, header.data_start, header.end, table)?;
+        }
+        pos = header.end;
+    }
+    Ok(())
+}
+
+fn parse_stbl_h264_sample_table(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    table: &mut H264SampleTable,
+) -> Result<()> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        match &header.name {
+            b"stsd" => parse_h264_stsd(bytes, header.data_start, header.end, table)?,
+            b"stts" => table.stts = parse_stts_box(bytes, header.data_start, header.end)?,
+            b"stsz" => table.sample_sizes = parse_stsz_box(bytes, header.data_start, header.end)?,
+            b"stco" => table.chunk_offsets = parse_stco_box(bytes, header.data_start, header.end)?,
+            b"co64" => table.chunk_offsets = parse_co64_box(bytes, header.data_start, header.end)?,
+            b"stsc" => {
+                table.sample_to_chunks = parse_stsc_box(bytes, header.data_start, header.end)?
+            }
+            _ => {}
+        }
+        pos = header.end;
+    }
+    Ok(())
+}
+
+fn parse_h264_stsd(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    table: &mut H264SampleTable,
+) -> Result<()> {
+    if start + 8 > end {
+        return Err(RmpegError::UnexpectedEof {
+            needed: start + 8,
+            remaining: bytes.len(),
+        });
+    }
+    let entry_count = read_u32(bytes, start + 4)? as usize;
+    let mut entry = start + 8;
+    for _ in 0..entry_count {
+        let Some(header) = next_box(bytes, entry, end)? else {
+            break;
+        };
+        let actual_coding =
+            protected_original_format(bytes, entry, header.end - entry, Some(*b"vide"))
+                .unwrap_or(header.name);
+        if matches!(&actual_coding, b"avc1" | b"avc3") {
+            if header.end.saturating_sub(entry) < 86 {
+                return Err(RmpegError::UnexpectedEof {
+                    needed: entry + 86,
+                    remaining: bytes.len(),
+                });
+            }
+            table.width = Some(u32::from(read_u16(bytes, entry + 32)?));
+            table.height = Some(u32::from(read_u16(bytes, entry + 34)?));
+            let child_start = sample_entry_child_start(bytes, entry, header.end - entry, *b"vide")
+                .ok_or_else(|| {
+                    RmpegError::InvalidData("invalid MP4 video sample entry".to_string())
+                })?;
+            let mut child_pos = child_start;
+            while let Some(child) = next_box(bytes, child_pos, header.end)? {
+                if &child.name == b"avcC" {
+                    parse_avcc_box(bytes, child.data_start, child.end, table)?;
+                    return Ok(());
+                }
+                child_pos = child.end;
+            }
+        }
+        entry = header.end;
+    }
+    Ok(())
+}
+
+fn parse_avcc_box(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    table: &mut H264SampleTable,
+) -> Result<()> {
+    if start + 7 > end {
+        return Err(RmpegError::UnexpectedEof {
+            needed: start + 7,
+            remaining: bytes.len(),
+        });
+    }
+    if bytes[start] != 1 {
+        return Err(RmpegError::InvalidData(
+            "unsupported AVCDecoderConfigurationRecord version".to_string(),
+        ));
+    }
+    let length_size = usize::from(bytes[start + 4] & 0x03) + 1;
+    if length_size == 3 {
+        return Err(RmpegError::InvalidData(
+            "invalid H264 MP4 NAL length size".to_string(),
+        ));
+    }
+    let sps_count = usize::from(bytes[start + 5] & 0x1f);
+    let mut pos = start + 6;
+    let mut sps = Vec::new();
+    for _ in 0..sps_count {
+        if pos + 2 > end {
+            return Err(RmpegError::UnexpectedEof {
+                needed: pos + 2,
+                remaining: bytes.len(),
+            });
+        }
+        let len = usize::from(read_u16(bytes, pos)?);
+        pos += 2;
+        if pos + len > end {
+            return Err(RmpegError::UnexpectedEof {
+                needed: pos + len,
+                remaining: bytes.len(),
+            });
+        }
+        sps.push(bytes[pos..pos + len].to_vec());
+        pos += len;
+    }
+    if pos >= end {
+        return Err(RmpegError::UnexpectedEof {
+            needed: pos + 1,
+            remaining: bytes.len(),
+        });
+    }
+    let pps_count = usize::from(bytes[pos]);
+    pos += 1;
+    let mut pps = Vec::new();
+    for _ in 0..pps_count {
+        if pos + 2 > end {
+            return Err(RmpegError::UnexpectedEof {
+                needed: pos + 2,
+                remaining: bytes.len(),
+            });
+        }
+        let len = usize::from(read_u16(bytes, pos)?);
+        pos += 2;
+        if pos + len > end {
+            return Err(RmpegError::UnexpectedEof {
+                needed: pos + len,
+                remaining: bytes.len(),
+            });
+        }
+        pps.push(bytes[pos..pos + len].to_vec());
+        pos += len;
+    }
+
+    table.length_size = Some(length_size);
+    table.sps = sps;
+    table.pps = pps;
+    Ok(())
+}
+
+fn parse_stsz_box(bytes: &[u8], start: usize, end: usize) -> Result<Vec<usize>> {
+    if start + 12 > end {
+        return Err(RmpegError::UnexpectedEof {
+            needed: start + 12,
+            remaining: bytes.len(),
+        });
+    }
+    let sample_size = read_u32(bytes, start + 4)?;
+    let sample_count = read_u32(bytes, start + 8)? as usize;
+    if sample_size != 0 {
+        let sample_size = usize::try_from(sample_size)
+            .map_err(|_| RmpegError::Unsupported("MP4 sample is too large".to_string()))?;
+        return Ok(vec![sample_size; sample_count]);
+    }
+
+    let mut sizes = Vec::with_capacity(sample_count);
+    let mut pos = start + 12;
+    for _ in 0..sample_count {
+        if pos + 4 > end {
+            return Err(RmpegError::UnexpectedEof {
+                needed: pos + 4,
+                remaining: bytes.len(),
+            });
+        }
+        sizes.push(
+            usize::try_from(read_u32(bytes, pos)?)
+                .map_err(|_| RmpegError::Unsupported("MP4 sample is too large".to_string()))?,
+        );
+        pos += 4;
+    }
+    Ok(sizes)
+}
+
+fn parse_stco_box(bytes: &[u8], start: usize, end: usize) -> Result<Vec<u64>> {
+    if start + 8 > end {
+        return Err(RmpegError::UnexpectedEof {
+            needed: start + 8,
+            remaining: bytes.len(),
+        });
+    }
+    let entry_count = read_u32(bytes, start + 4)? as usize;
+    let mut offsets = Vec::with_capacity(entry_count);
+    let mut pos = start + 8;
+    for _ in 0..entry_count {
+        if pos + 4 > end {
+            return Err(RmpegError::UnexpectedEof {
+                needed: pos + 4,
+                remaining: bytes.len(),
+            });
+        }
+        offsets.push(u64::from(read_u32(bytes, pos)?));
+        pos += 4;
+    }
+    Ok(offsets)
+}
+
+fn parse_co64_box(bytes: &[u8], start: usize, end: usize) -> Result<Vec<u64>> {
+    if start + 8 > end {
+        return Err(RmpegError::UnexpectedEof {
+            needed: start + 8,
+            remaining: bytes.len(),
+        });
+    }
+    let entry_count = read_u32(bytes, start + 4)? as usize;
+    let mut offsets = Vec::with_capacity(entry_count);
+    let mut pos = start + 8;
+    for _ in 0..entry_count {
+        if pos + 8 > end {
+            return Err(RmpegError::UnexpectedEof {
+                needed: pos + 8,
+                remaining: bytes.len(),
+            });
+        }
+        offsets.push(read_u64(bytes, pos)?);
+        pos += 8;
+    }
+    Ok(offsets)
+}
+
+fn parse_stsc_box(bytes: &[u8], start: usize, end: usize) -> Result<Vec<SampleToChunk>> {
+    if start + 8 > end {
+        return Err(RmpegError::UnexpectedEof {
+            needed: start + 8,
+            remaining: bytes.len(),
+        });
+    }
+    let entry_count = read_u32(bytes, start + 4)? as usize;
+    let mut entries = Vec::with_capacity(entry_count);
+    let mut pos = start + 8;
+    for _ in 0..entry_count {
+        if pos + 12 > end {
+            return Err(RmpegError::UnexpectedEof {
+                needed: pos + 12,
+                remaining: bytes.len(),
+            });
+        }
+        let first_chunk = read_u32(bytes, pos)?;
+        let samples_per_chunk = read_u32(bytes, pos + 4)?;
+        if first_chunk == 0 || samples_per_chunk == 0 {
+            return Err(RmpegError::InvalidData(
+                "invalid MP4 sample-to-chunk table".to_string(),
+            ));
+        }
+        entries.push(SampleToChunk {
+            first_chunk,
+            samples_per_chunk,
+        });
+        pos += 12;
+    }
+    Ok(entries)
+}
+
+fn assemble_chunk_samples(
+    bytes: &[u8],
+    sample_sizes: &[usize],
+    chunk_offsets: &[u64],
+    sample_to_chunks: &[SampleToChunk],
+) -> Result<Vec<Vec<u8>>> {
+    if sample_sizes.is_empty() {
+        return Ok(Vec::new());
+    }
+    if chunk_offsets.is_empty() || sample_to_chunks.is_empty() {
+        return Err(RmpegError::InvalidData(
+            "incomplete MP4 sample table".to_string(),
+        ));
+    }
+
+    let mut samples = Vec::with_capacity(sample_sizes.len());
+    let mut sample_index = 0_usize;
+    let mut stsc_index = 0_usize;
+    for (chunk_index, chunk_offset) in chunk_offsets.iter().enumerate() {
+        let chunk_number = u32::try_from(chunk_index + 1)
+            .map_err(|_| RmpegError::Unsupported("too many MP4 chunks".to_string()))?;
+        while stsc_index + 1 < sample_to_chunks.len()
+            && sample_to_chunks[stsc_index + 1].first_chunk <= chunk_number
+        {
+            stsc_index += 1;
+        }
+        let mut sample_pos = usize::try_from(*chunk_offset)
+            .map_err(|_| RmpegError::Unsupported("MP4 chunk offset is too large".to_string()))?;
+        for _ in 0..sample_to_chunks[stsc_index].samples_per_chunk {
+            if sample_index >= sample_sizes.len() {
+                break;
+            }
+            let sample_size = sample_sizes[sample_index];
+            let sample_end = sample_pos
+                .checked_add(sample_size)
+                .ok_or_else(|| RmpegError::InvalidData("MP4 sample offset overflow".to_string()))?;
+            if sample_end > bytes.len() {
+                return Err(RmpegError::UnexpectedEof {
+                    needed: sample_end,
+                    remaining: bytes.len(),
+                });
+            }
+            samples.push(bytes[sample_pos..sample_end].to_vec());
+            sample_pos = sample_end;
+            sample_index += 1;
+        }
+        if sample_index == sample_sizes.len() {
+            break;
+        }
+    }
+
+    if sample_index != sample_sizes.len() {
+        return Err(RmpegError::InvalidData(
+            "MP4 sample table did not map all samples".to_string(),
+        ));
+    }
+    Ok(samples)
+}
+
+fn parse_mdia_stts(bytes: &[u8], start: usize, end: usize) -> Result<Option<(usize, u64)>> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"minf" {
+            let mut minf_pos = header.data_start;
+            while let Some(minf_header) = next_box(bytes, minf_pos, header.end)? {
+                if &minf_header.name == b"stbl" {
+                    let mut stbl_pos = minf_header.data_start;
+                    while let Some(stbl_header) = next_box(bytes, stbl_pos, minf_header.end)? {
+                        if &stbl_header.name == b"stts" {
+                            return parse_stts_box(bytes, stbl_header.data_start, stbl_header.end);
+                        }
+                        stbl_pos = stbl_header.end;
+                    }
+                }
+                minf_pos = minf_header.end;
+            }
+        }
+        pos = header.end;
+    }
+    Ok(None)
+}
+
+fn parse_stts_box(bytes: &[u8], start: usize, end: usize) -> Result<Option<(usize, u64)>> {
+    if start + 8 > end {
+        return Ok(None);
+    }
+    let entry_count = read_u32(bytes, start + 4)? as usize;
+    let mut pos = start + 8;
+    let mut frame_count = 0_u64;
+    let mut duration = 0_u64;
+    for _ in 0..entry_count {
+        if pos + 8 > end {
+            return Ok(None);
+        }
+        let count = u64::from(read_u32(bytes, pos)?);
+        let delta = u64::from(read_u32(bytes, pos + 4)?);
+        frame_count = frame_count.saturating_add(count);
+        duration = duration.saturating_add(count.saturating_mul(delta));
+        pos += 8;
+    }
+    if frame_count == 0 || duration == 0 {
+        return Ok(None);
+    }
+    let frame_count = usize::try_from(frame_count)
+        .map_err(|_| RmpegError::Unsupported("MP4 video frame count is too large".to_string()))?;
+    Ok(Some((frame_count, duration)))
+}
+
+fn mp4_video_timing(frame_count: usize, duration: u64, timescale: u32) -> Option<Mp4VideoTiming> {
+    let frame_count_u64 = u64::try_from(frame_count).ok()?;
+    let num = frame_count_u64.checked_mul(u64::from(timescale))?;
+    let den = duration;
+    if num == 0 || den == 0 {
+        return None;
+    }
+    let divisor = gcd(num, den);
+    Some(Mp4VideoTiming {
+        frame_count,
+        frame_rate_num: u32::try_from(num / divisor).ok()?,
+        frame_rate_den: u32::try_from(den / divisor).ok()?,
+    })
+}
+
+fn gcd(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        let remainder = a % b;
+        a = b;
+        b = remainder;
+    }
+    a
 }
 
 fn moov_has_only_ignored_subtitle_tracks(bytes: &[u8], start: usize, end: usize) -> Result<bool> {
@@ -1212,6 +1811,125 @@ mod tests {
         assert_eq!(doc.streams[0].codec_name, "av1");
         assert_eq!(doc.streams[0].width, Some(352));
         assert_eq!(doc.streams[0].height, Some(288));
+    }
+
+    #[test]
+    fn parses_video_timing_from_stts() {
+        let mut hdlr = vec![0; 12];
+        hdlr[8..12].copy_from_slice(b"vide");
+
+        let mut mdhd = vec![0; 24];
+        mdhd[12..16].copy_from_slice(&10_240_u32.to_be_bytes());
+        mdhd[16..20].copy_from_slice(&10_240_u32.to_be_bytes());
+
+        let mut stts = vec![0; 4];
+        stts.extend_from_slice(&1_u32.to_be_bytes());
+        stts.extend_from_slice(&10_u32.to_be_bytes());
+        stts.extend_from_slice(&1_024_u32.to_be_bytes());
+
+        let stbl = box_bytes(b"stts", &stts);
+        let minf = box_bytes(b"stbl", &stbl);
+        let mut mdia = Vec::new();
+        mdia.extend_from_slice(&box_bytes(b"mdhd", &mdhd));
+        mdia.extend_from_slice(&box_bytes(b"hdlr", &hdlr));
+        mdia.extend_from_slice(&box_bytes(b"minf", &minf));
+        let trak = box_bytes(b"mdia", &mdia);
+        let moov = box_bytes(b"trak", &trak);
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&box_bytes(b"ftyp", b"isom\0\0\0\0isom"));
+        bytes.extend_from_slice(&box_bytes(b"moov", &moov));
+
+        let timing = parse_mp4_video_timing(&bytes).unwrap().unwrap();
+        assert_eq!(timing.frame_count, 10);
+        assert_eq!(timing.frame_rate_num, 10);
+        assert_eq!(timing.frame_rate_den, 1);
+    }
+
+    #[test]
+    fn extracts_h264_samples_from_single_chunk_mp4() {
+        let ftyp = box_bytes(b"ftyp", b"isom\0\0\0\0isom");
+        let sample_1 = [0, 0, 0, 1, 0x65];
+        let sample_2 = [0, 0, 0, 1, 0x41, 0x80];
+        let mut mdat_payload = Vec::new();
+        mdat_payload.extend_from_slice(&sample_1);
+        mdat_payload.extend_from_slice(&sample_2);
+        let chunk_offset = (ftyp.len() + 8) as u32;
+        let mdat = box_bytes(b"mdat", &mdat_payload);
+
+        let mut avcc = vec![1, 0x42, 0, 0x1e, 0xff, 0xe1];
+        avcc.extend_from_slice(&3_u16.to_be_bytes());
+        avcc.extend_from_slice(&[0x67, 0x42, 0x00]);
+        avcc.push(1);
+        avcc.extend_from_slice(&2_u16.to_be_bytes());
+        avcc.extend_from_slice(&[0x68, 0xce]);
+
+        let mut avc1_payload = vec![0; 78];
+        avc1_payload[24..26].copy_from_slice(&64_u16.to_be_bytes());
+        avc1_payload[26..28].copy_from_slice(&48_u16.to_be_bytes());
+        avc1_payload.extend_from_slice(&box_bytes(b"avcC", &avcc));
+        let avc1 = box_bytes(b"avc1", &avc1_payload);
+
+        let mut stsd = vec![0; 4];
+        stsd.extend_from_slice(&1_u32.to_be_bytes());
+        stsd.extend_from_slice(&avc1);
+
+        let mut stts = vec![0; 4];
+        stts.extend_from_slice(&1_u32.to_be_bytes());
+        stts.extend_from_slice(&2_u32.to_be_bytes());
+        stts.extend_from_slice(&512_u32.to_be_bytes());
+
+        let mut stsz = vec![0; 4];
+        stsz.extend_from_slice(&0_u32.to_be_bytes());
+        stsz.extend_from_slice(&2_u32.to_be_bytes());
+        stsz.extend_from_slice(&(sample_1.len() as u32).to_be_bytes());
+        stsz.extend_from_slice(&(sample_2.len() as u32).to_be_bytes());
+
+        let mut stco = vec![0; 4];
+        stco.extend_from_slice(&1_u32.to_be_bytes());
+        stco.extend_from_slice(&chunk_offset.to_be_bytes());
+
+        let mut stsc = vec![0; 4];
+        stsc.extend_from_slice(&1_u32.to_be_bytes());
+        stsc.extend_from_slice(&1_u32.to_be_bytes());
+        stsc.extend_from_slice(&2_u32.to_be_bytes());
+        stsc.extend_from_slice(&1_u32.to_be_bytes());
+
+        let mut stbl = Vec::new();
+        stbl.extend_from_slice(&box_bytes(b"stsd", &stsd));
+        stbl.extend_from_slice(&box_bytes(b"stts", &stts));
+        stbl.extend_from_slice(&box_bytes(b"stsz", &stsz));
+        stbl.extend_from_slice(&box_bytes(b"stco", &stco));
+        stbl.extend_from_slice(&box_bytes(b"stsc", &stsc));
+
+        let mut mdhd = vec![0; 24];
+        mdhd[12..16].copy_from_slice(&1_024_u32.to_be_bytes());
+        mdhd[16..20].copy_from_slice(&1_024_u32.to_be_bytes());
+        let mut hdlr = vec![0; 12];
+        hdlr[8..12].copy_from_slice(b"vide");
+        let minf = box_bytes(b"stbl", &stbl);
+        let mut mdia = Vec::new();
+        mdia.extend_from_slice(&box_bytes(b"mdhd", &mdhd));
+        mdia.extend_from_slice(&box_bytes(b"hdlr", &hdlr));
+        mdia.extend_from_slice(&box_bytes(b"minf", &minf));
+        let trak = box_bytes(b"mdia", &mdia);
+        let moov = box_bytes(b"trak", &trak);
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&ftyp);
+        bytes.extend_from_slice(&mdat);
+        bytes.extend_from_slice(&box_bytes(b"moov", &moov));
+
+        let samples = extract_mp4_h264_samples(&bytes).unwrap().unwrap();
+
+        assert_eq!(samples.width, 64);
+        assert_eq!(samples.height, 48);
+        assert_eq!(samples.frame_rate_num, 2);
+        assert_eq!(samples.frame_rate_den, 1);
+        assert_eq!(samples.length_size, 4);
+        assert_eq!(samples.sps, vec![vec![0x67, 0x42, 0x00]]);
+        assert_eq!(samples.pps, vec![vec![0x68, 0xce]]);
+        assert_eq!(samples.samples, vec![sample_1.to_vec(), sample_2.to_vec()]);
     }
 
     #[test]
