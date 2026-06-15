@@ -67,7 +67,12 @@ const SGI_STORAGE_VERBATIM: u8 = 0;
 const SGI_STORAGE_RLE: u8 = 1;
 
 pub fn png_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
-    let decoder = png::Decoder::new(Cursor::new(input));
+    let mut decoder = png::Decoder::new(Cursor::new(input));
+    if png_has_animation_control(input) {
+        decoder.set_transformations(
+            png::Transformations::normalize_to_color8() | png::Transformations::ALPHA,
+        );
+    }
     let mut reader = decoder
         .read_info()
         .map_err(|error| RmpegError::InvalidData(error.to_string()))?;
@@ -75,6 +80,20 @@ pub fn png_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
         .output_buffer_size()
         .ok_or_else(|| RmpegError::InvalidData("PNG output size is unavailable".to_string()))?;
     let mut output = vec![0; output_size];
+    if let Some(animation) = reader.info().animation_control() {
+        let frame_count = usize::try_from(animation.num_frames)
+            .map_err(|_| RmpegError::Unsupported("APNG frame count is too large".to_string()))?;
+        if frame_count == 0 {
+            return Err(RmpegError::InvalidData(
+                "APNG animation has zero frames".to_string(),
+            ));
+        }
+        let width = usize::try_from(reader.info().width)
+            .map_err(|_| RmpegError::Unsupported("APNG width is too large".to_string()))?;
+        let height = usize::try_from(reader.info().height)
+            .map_err(|_| RmpegError::Unsupported("APNG height is too large".to_string()))?;
+        return apng_image_frame_hashes(&mut reader, &mut output, width, height, frame_count);
+    }
     let info = reader
         .next_frame(&mut output)
         .map_err(|error| RmpegError::InvalidData(error.to_string()))?;
@@ -88,6 +107,257 @@ pub fn png_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
         size: frame.len(),
         hash: md5_hex(frame),
     }])
+}
+
+fn apng_image_frame_hashes(
+    reader: &mut png::Reader<Cursor<&[u8]>>,
+    output: &mut Vec<u8>,
+    width: usize,
+    height: usize,
+    frame_count: usize,
+) -> Result<Vec<AudioFrameHash>> {
+    let canvas_len = rgba_frame_len(width, height, "APNG canvas")?;
+    if output.len() < canvas_len {
+        output.resize(canvas_len, 0);
+    }
+
+    let mut canvas = vec![0; canvas_len];
+    let mut frames = Vec::with_capacity(frame_count);
+    while frames.len() < frame_count {
+        let info = reader
+            .next_frame(output)
+            .map_err(|error| RmpegError::InvalidData(error.to_string()))?;
+        let Some(control) = reader.info().frame_control().copied() else {
+            continue;
+        };
+        if info.color_type != png::ColorType::Rgba || info.bit_depth != png::BitDepth::Eight {
+            return Err(RmpegError::Unsupported(format!(
+                "unsupported APNG output color {:?} depth {:?}",
+                info.color_type, info.bit_depth
+            )));
+        }
+        let subframe = &output[..info.buffer_size()];
+        let restore = if control.dispose_op == png::DisposeOp::Previous {
+            Some(canvas.clone())
+        } else {
+            None
+        };
+        blend_apng_subframe(&mut canvas, width, height, subframe, &control)?;
+
+        let frame_index = frames.len() as u64;
+        frames.push(AudioFrameHash {
+            stream_index: 0,
+            dts: frame_index,
+            pts: frame_index,
+            duration: 1,
+            size: canvas.len(),
+            hash: md5_hex(&canvas),
+        });
+        dispose_apng_subframe(&mut canvas, width, height, &control, restore)?;
+    }
+
+    Ok(frames)
+}
+
+fn blend_apng_subframe(
+    canvas: &mut [u8],
+    canvas_width: usize,
+    canvas_height: usize,
+    subframe: &[u8],
+    control: &png::FrameControl,
+) -> Result<()> {
+    let x_offset = usize::try_from(control.x_offset)
+        .map_err(|_| RmpegError::Unsupported("APNG x offset is too large".to_string()))?;
+    let y_offset = usize::try_from(control.y_offset)
+        .map_err(|_| RmpegError::Unsupported("APNG y offset is too large".to_string()))?;
+    let frame_width = usize::try_from(control.width)
+        .map_err(|_| RmpegError::Unsupported("APNG frame width is too large".to_string()))?;
+    let frame_height = usize::try_from(control.height)
+        .map_err(|_| RmpegError::Unsupported("APNG frame height is too large".to_string()))?;
+    validate_apng_region(
+        canvas_width,
+        canvas_height,
+        x_offset,
+        y_offset,
+        frame_width,
+        frame_height,
+    )?;
+    let frame_len = rgba_frame_len(frame_width, frame_height, "APNG subframe")?;
+    if subframe.len() != frame_len {
+        return Err(RmpegError::InvalidData(
+            "APNG subframe size does not match frame control".to_string(),
+        ));
+    }
+
+    for row in 0..frame_height {
+        let src_row = row
+            .checked_mul(frame_width)
+            .and_then(|value| value.checked_mul(4))
+            .ok_or_else(|| RmpegError::InvalidData("APNG subframe row overflow".to_string()))?;
+        let dst_row = (y_offset + row)
+            .checked_mul(canvas_width)
+            .and_then(|value| value.checked_add(x_offset))
+            .and_then(|value| value.checked_mul(4))
+            .ok_or_else(|| RmpegError::InvalidData("APNG canvas row overflow".to_string()))?;
+        for column in 0..frame_width {
+            let src = src_row + column * 4;
+            let dst = dst_row + column * 4;
+            match control.blend_op {
+                png::BlendOp::Source => {
+                    canvas[dst..dst + 4].copy_from_slice(&subframe[src..src + 4])
+                }
+                png::BlendOp::Over => {
+                    alpha_over(&subframe[src..src + 4], &mut canvas[dst..dst + 4])
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn dispose_apng_subframe(
+    canvas: &mut [u8],
+    canvas_width: usize,
+    canvas_height: usize,
+    control: &png::FrameControl,
+    restore: Option<Vec<u8>>,
+) -> Result<()> {
+    match control.dispose_op {
+        png::DisposeOp::None => Ok(()),
+        png::DisposeOp::Background => {
+            clear_apng_region(canvas, canvas_width, canvas_height, control)
+        }
+        png::DisposeOp::Previous => {
+            if let Some(previous) = restore {
+                canvas.copy_from_slice(&previous);
+                Ok(())
+            } else {
+                clear_apng_region(canvas, canvas_width, canvas_height, control)
+            }
+        }
+    }
+}
+
+fn clear_apng_region(
+    canvas: &mut [u8],
+    canvas_width: usize,
+    canvas_height: usize,
+    control: &png::FrameControl,
+) -> Result<()> {
+    let x_offset = usize::try_from(control.x_offset)
+        .map_err(|_| RmpegError::Unsupported("APNG x offset is too large".to_string()))?;
+    let y_offset = usize::try_from(control.y_offset)
+        .map_err(|_| RmpegError::Unsupported("APNG y offset is too large".to_string()))?;
+    let frame_width = usize::try_from(control.width)
+        .map_err(|_| RmpegError::Unsupported("APNG frame width is too large".to_string()))?;
+    let frame_height = usize::try_from(control.height)
+        .map_err(|_| RmpegError::Unsupported("APNG frame height is too large".to_string()))?;
+    validate_apng_region(
+        canvas_width,
+        canvas_height,
+        x_offset,
+        y_offset,
+        frame_width,
+        frame_height,
+    )?;
+    for row in 0..frame_height {
+        let start = (y_offset + row)
+            .checked_mul(canvas_width)
+            .and_then(|value| value.checked_add(x_offset))
+            .and_then(|value| value.checked_mul(4))
+            .ok_or_else(|| RmpegError::InvalidData("APNG clear row overflow".to_string()))?;
+        let end = start
+            .checked_add(frame_width * 4)
+            .ok_or_else(|| RmpegError::InvalidData("APNG clear row end overflow".to_string()))?;
+        canvas[start..end].fill(0);
+    }
+    Ok(())
+}
+
+fn validate_apng_region(
+    canvas_width: usize,
+    canvas_height: usize,
+    x_offset: usize,
+    y_offset: usize,
+    frame_width: usize,
+    frame_height: usize,
+) -> Result<()> {
+    let x_end = x_offset
+        .checked_add(frame_width)
+        .ok_or_else(|| RmpegError::InvalidData("APNG frame x range overflow".to_string()))?;
+    let y_end = y_offset
+        .checked_add(frame_height)
+        .ok_or_else(|| RmpegError::InvalidData("APNG frame y range overflow".to_string()))?;
+    if x_end > canvas_width || y_end > canvas_height {
+        return Err(RmpegError::InvalidData(
+            "APNG frame lies outside canvas".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn rgba_frame_len(width: usize, height: usize, label: &str) -> Result<usize> {
+    width
+        .checked_mul(height)
+        .and_then(|value| value.checked_mul(4))
+        .ok_or_else(|| RmpegError::InvalidData(format!("{label} size overflow")))
+}
+
+fn alpha_over(src: &[u8], dst: &mut [u8]) {
+    let src_alpha = u32::from(src[3]);
+    if src_alpha == 0 {
+        return;
+    }
+    if src_alpha == 255 {
+        dst.copy_from_slice(src);
+        return;
+    }
+
+    let dst_alpha = u32::from(dst[3]);
+    let inverse_alpha = 255 - src_alpha;
+    let out_alpha = src_alpha + div255(dst_alpha * inverse_alpha);
+    if out_alpha == 0 {
+        dst.fill(0);
+        return;
+    }
+
+    for channel in 0..3 {
+        let src_premultiplied = u32::from(src[channel]) * src_alpha;
+        let dst_premultiplied = div255(u32::from(dst[channel]) * dst_alpha * inverse_alpha);
+        dst[channel] = ((src_premultiplied + dst_premultiplied + out_alpha / 2) / out_alpha) as u8;
+    }
+    dst[3] = out_alpha as u8;
+}
+
+fn div255(value: u32) -> u32 {
+    (value + 127) / 255
+}
+
+fn png_has_animation_control(input: &[u8]) -> bool {
+    if !input.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return false;
+    }
+    let mut pos = 8_usize;
+    while pos + 8 <= input.len() {
+        let len = u32::from_be_bytes([input[pos], input[pos + 1], input[pos + 2], input[pos + 3]])
+            as usize;
+        let chunk_type = &input[pos + 4..pos + 8];
+        if chunk_type == b"acTL" {
+            return true;
+        }
+        if chunk_type == b"IDAT" || chunk_type == b"IEND" {
+            return false;
+        }
+        let Some(next_pos) = pos.checked_add(12).and_then(|value| value.checked_add(len)) else {
+            return false;
+        };
+        if next_pos > input.len() {
+            return false;
+        }
+        pos = next_pos;
+    }
+    false
 }
 
 pub fn pnm_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
@@ -3797,6 +4067,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn hashes_all_apng_frames() {
+        let input = apng_fixture(
+            2,
+            false,
+            &[[0x10, 0x20, 0x30, 0xff], [0x40, 0x50, 0x60, 0xff]],
+        );
+
+        let frames = png_image_frame_hashes(&input).expect("apng frame hashes");
+
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].size, 4);
+        assert_eq!(frames[0].hash, md5_hex(&[0x10, 0x20, 0x30, 0xff]));
+        assert_eq!(frames[1].size, 4);
+        assert_eq!(frames[1].hash, md5_hex(&[0x40, 0x50, 0x60, 0xff]));
+    }
+
+    #[test]
+    fn skips_apng_separate_default_image() {
+        let input = apng_fixture(
+            1,
+            true,
+            &[[0x10, 0x20, 0x30, 0xff], [0x40, 0x50, 0x60, 0xff]],
+        );
+
+        let frames = png_image_frame_hashes(&input).expect("apng frame hashes");
+
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].size, 4);
+        assert_eq!(frames[0].hash, md5_hex(&[0x40, 0x50, 0x60, 0xff]));
+    }
+
+    #[test]
     fn hashes_x11_byte_xbm_like_ffmpeg() {
         let input = b"#define image_width 8\n#define image_height 1\nstatic unsigned char image_bits[] = { 0x22 };\n";
         let frames = xbm_image_frame_hashes(input).expect("xbm frame hash");
@@ -4580,6 +4882,27 @@ mod tests {
             frames[0].hash,
             md5_hex(&[0x12, 0x34, 0x12, 0x34, 0x12, 0x34])
         );
+    }
+
+    fn apng_fixture(frame_count: u32, separate_default_image: bool, frames: &[[u8; 4]]) -> Vec<u8> {
+        let mut output = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut output, 1, 1);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_animated(frame_count, 0).expect("animated png");
+            if separate_default_image {
+                encoder
+                    .set_sep_def_img(true)
+                    .expect("separate default image");
+            }
+            let mut writer = encoder.write_header().expect("png header");
+            for frame in frames {
+                writer.write_image_data(frame).expect("png frame");
+            }
+            writer.finish().expect("finish png");
+        }
+        output
     }
 
     fn bmp_header(
