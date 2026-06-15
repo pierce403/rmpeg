@@ -119,10 +119,7 @@ fn decode_gif(bytes: &[u8]) -> Result<GifDecoded> {
         background_index,
     };
 
-    loop {
-        let Some(&marker) = bytes.get(pos) else {
-            break;
-        };
+    while let Some(&marker) = bytes.get(pos) {
         pos += 1;
         match marker {
             0x21 => {
