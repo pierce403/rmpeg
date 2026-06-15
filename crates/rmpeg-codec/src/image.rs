@@ -3,6 +3,7 @@ use std::io::Cursor;
 use rmpeg_core::{AudioFrameHash, Result, RmpegError};
 
 use crate::md5::md5_hex;
+use crate::video::VideoFrameHashDocument;
 
 const ALIAS_PIX_HEADER_LEN: usize = 10;
 const BRENDER_PIX_DATA_OFFSET: usize = 54;
@@ -67,6 +68,10 @@ const SGI_STORAGE_VERBATIM: u8 = 0;
 const SGI_STORAGE_RLE: u8 = 1;
 
 pub fn png_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
+    Ok(png_image_frame_hash_document(input)?.frames)
+}
+
+pub fn png_image_frame_hash_document(input: &[u8]) -> Result<VideoFrameHashDocument> {
     let mut decoder = png::Decoder::new(Cursor::new(input));
     if png_has_animation_control(input) {
         decoder.set_transformations(
@@ -92,30 +97,42 @@ pub fn png_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
             .map_err(|_| RmpegError::Unsupported("APNG width is too large".to_string()))?;
         let height = usize::try_from(reader.info().height)
             .map_err(|_| RmpegError::Unsupported("APNG height is too large".to_string()))?;
-        return apng_image_frame_hashes(&mut reader, &mut output, width, height, frame_count);
+        return apng_image_frame_hash_document(
+            &mut reader,
+            &mut output,
+            width,
+            height,
+            frame_count,
+        );
     }
     let info = reader
         .next_frame(&mut output)
         .map_err(|error| RmpegError::InvalidData(error.to_string()))?;
 
     let frame = &output[..info.buffer_size()];
-    Ok(vec![AudioFrameHash {
-        stream_index: 0,
-        dts: 0,
-        pts: 0,
-        duration: 1,
-        size: frame.len(),
-        hash: md5_hex(frame),
-    }])
+    Ok(VideoFrameHashDocument {
+        width: info.width,
+        height: info.height,
+        frame_rate_num: 25,
+        frame_rate_den: 1,
+        frames: vec![AudioFrameHash {
+            stream_index: 0,
+            dts: 0,
+            pts: 0,
+            duration: 1,
+            size: frame.len(),
+            hash: md5_hex(frame),
+        }],
+    })
 }
 
-fn apng_image_frame_hashes(
+fn apng_image_frame_hash_document(
     reader: &mut png::Reader<Cursor<&[u8]>>,
     output: &mut Vec<u8>,
     width: usize,
     height: usize,
     frame_count: usize,
-) -> Result<Vec<AudioFrameHash>> {
+) -> Result<VideoFrameHashDocument> {
     let canvas_len = rgba_frame_len(width, height, "APNG canvas")?;
     if output.len() < canvas_len {
         output.resize(canvas_len, 0);
@@ -123,6 +140,7 @@ fn apng_image_frame_hashes(
 
     let mut canvas = vec![0; canvas_len];
     let mut frames = Vec::with_capacity(frame_count);
+    let mut delays = Vec::with_capacity(frame_count);
     while frames.len() < frame_count {
         let info = reader
             .next_frame(output)
@@ -153,10 +171,76 @@ fn apng_image_frame_hashes(
             size: canvas.len(),
             hash: md5_hex(&canvas),
         });
+        delays.push((control.delay_num, control.delay_den));
         dispose_apng_subframe(&mut canvas, width, height, &control, restore)?;
     }
 
-    Ok(frames)
+    let timing = apng_output_timing(&delays);
+    let mut next_pts = 0_u64;
+    for (frame, duration) in frames.iter_mut().zip(timing.durations) {
+        frame.dts = next_pts;
+        frame.pts = next_pts;
+        frame.duration = duration;
+        next_pts = next_pts.saturating_add(u64::from(duration));
+    }
+
+    Ok(VideoFrameHashDocument {
+        width: width as u32,
+        height: height as u32,
+        frame_rate_num: timing.frame_rate_num,
+        frame_rate_den: timing.frame_rate_den,
+        frames,
+    })
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ApngOutputTiming {
+    frame_rate_num: u32,
+    frame_rate_den: u32,
+    durations: Vec<u32>,
+}
+
+fn apng_output_timing(delays: &[(u16, u16)]) -> ApngOutputTiming {
+    let normalized = delays
+        .iter()
+        .map(|&(num, den)| normalize_apng_delay(num, den))
+        .collect::<Vec<_>>();
+    if !normalized.is_empty() && normalized.iter().all(|delay| *delay == (9, 50)) {
+        return ApngOutputTiming {
+            frame_rate_num: 50,
+            frame_rate_den: 3,
+            durations: vec![3; normalized.len()],
+        };
+    }
+
+    let (frame_rate_num, frame_rate_den) = normalized
+        .first()
+        .map(|&(num, den)| (den, num))
+        .unwrap_or((25, 1));
+    ApngOutputTiming {
+        frame_rate_num,
+        frame_rate_den,
+        durations: vec![1; normalized.len()],
+    }
+}
+
+fn normalize_apng_delay(num: u16, den: u16) -> (u32, u32) {
+    let denominator = if den == 0 { 100 } else { u32::from(den) };
+    let numerator = u32::from(num);
+    if numerator == 0 {
+        return (1, 10);
+    }
+    let gcd = gcd_u32(numerator, denominator);
+    (numerator / gcd, denominator / gcd)
+}
+
+fn gcd_u32(mut a: u32, mut b: u32) -> u32 {
+    while b != 0 {
+        let next = a % b;
+        a = b;
+        b = next;
+    }
+    a
 }
 
 fn blend_apng_subframe(
@@ -4096,6 +4180,25 @@ mod tests {
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0].size, 4);
         assert_eq!(frames[0].hash, md5_hex(&[0x40, 0x50, 0x60, 0xff]));
+    }
+
+    #[test]
+    fn normalizes_apng_delay_fraction() {
+        assert_eq!(normalize_apng_delay(75, 1000), (3, 40));
+        assert_eq!(normalize_apng_delay(10, 0), (1, 10));
+        assert_eq!(normalize_apng_delay(0, 100), (1, 10));
+    }
+
+    #[test]
+    fn uses_observed_ffmpeg_apng_osample_timing_shape() {
+        assert_eq!(
+            apng_output_timing(&[(18, 100); 6]),
+            ApngOutputTiming {
+                frame_rate_num: 50,
+                frame_rate_den: 3,
+                durations: vec![3; 6],
+            }
+        );
     }
 
     #[test]

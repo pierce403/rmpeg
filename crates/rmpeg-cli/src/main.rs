@@ -8,10 +8,10 @@ use rmpeg_codec::{
     alias_pix_image_frame_hashes, audio_frame_hashes_from_samples, bmp_image_frame_hashes,
     brender_pix_image_frame_hashes, compressed_audio_decode, dds_image_frame_hashes,
     dpx_image_frame_hashes, fits_image_frame_hashes, gif_video_frame_hashes, md5::md5_hex,
-    mp4_h264_frame_hashes, png_image_frame_hashes, pnm_image_frame_hashes, ptx_image_frame_hashes,
-    samples_to_s16le_bytes, sgi_image_frame_hashes, sunrast_image_frame_hashes,
-    tga_image_frame_hashes, xbm_image_frame_hashes, AudioFrameHashDocument, DecodedAudio,
-    VideoFrameHashDocument,
+    mp4_h264_frame_hashes, png_image_frame_hash_document, pnm_image_frame_hashes,
+    ptx_image_frame_hashes, samples_to_s16le_bytes, sgi_image_frame_hashes,
+    sunrast_image_frame_hashes, tga_image_frame_hashes, xbm_image_frame_hashes,
+    AudioFrameHashDocument, DecodedAudio, VideoFrameHashDocument,
 };
 use rmpeg_core::{AudioFrameHash, ProbeDocument, Result, RmpegError};
 use rmpeg_format::{parse_mp4_video_timing, parse_wav, probe_path, WavFile};
@@ -78,8 +78,8 @@ fn decode_image(args: &[String]) -> Result<()> {
         Some("sgi") => sgi_image_frame_hashes(&input)?,
         Some("tga") => tga_image_frame_hashes(&input)?,
         Some("xbm") => xbm_image_frame_hashes(&input)?,
-        _ => match png_image_frame_hashes(&input) {
-            Ok(frames) => frames,
+        _ => match png_image_frame_hash_document(&input) {
+            Ok(document) => return print_video_framemd5(document),
             Err(error) => metadata_only_image_frame_hashes(&args[1], &input).or(Err(error))?,
         },
     };
