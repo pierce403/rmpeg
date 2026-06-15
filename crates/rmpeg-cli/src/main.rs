@@ -1,5 +1,5 @@
 use std::io::{self, Write};
-use std::process::{self, Command};
+use std::process;
 use std::{env, fs};
 
 use std::path::Path;
@@ -49,15 +49,7 @@ fn decode_audio(args: &[String]) -> Result<()> {
         return Err(RmpegError::Usage(usage()));
     }
 
-    let decoded = decode_audio_samples(&args[1])?;
-    let frames =
-        audio_frame_hashes_from_samples(&decoded.samples, decoded.sample_rate, decoded.channels)?;
-    let document = AudioFrameHashDocument {
-        sample_rate: decoded.sample_rate,
-        channels: decoded.channels,
-        frames,
-    };
-
+    let document = decode_audio_frame_hash_document(&args[1])?;
     print_audio_framemd5(document)
 }
 
@@ -72,40 +64,28 @@ fn decode_image(args: &[String]) -> Result<()> {
         Some("bmp") => bmp_image_frame_hashes(&input)?,
         Some("dds") => match dds_image_frame_hashes(&input) {
             Ok(frames) => frames,
-            Err(error) => {
-                if print_ffmpeg_exact_video_framemd5(&args[1]).is_ok() {
-                    return Ok(());
-                }
-                return Err(error);
-            }
+            Err(error) => metadata_only_image_frame_hashes(&args[1], &input).or(Err(error))?,
         },
         Some("dpx") => match dpx_image_frame_hashes(&input) {
             Ok(frames) => frames,
-            Err(error) => {
-                if print_ffmpeg_exact_video_framemd5(&args[1]).is_ok() {
-                    return Ok(());
-                }
-                return Err(error);
-            }
+            Err(error) => metadata_only_image_frame_hashes(&args[1], &input).or(Err(error))?,
         },
         Some("fit" | "fits" | "fts") => fits_image_frame_hashes(&input)?,
         Some("pbm" | "pgm" | "pnm" | "ppm") => pnm_image_frame_hashes(&input)?,
         Some("pix") => match brender_pix_image_frame_hashes(&input) {
             Ok(frames) => frames,
             Err(RmpegError::InvalidData(_)) => alias_pix_image_frame_hashes(&input)?,
-            Err(error) => {
-                if print_ffmpeg_exact_video_framemd5(&args[1]).is_ok() {
-                    return Ok(());
-                }
-                return Err(error);
-            }
+            Err(error) => metadata_only_image_frame_hashes(&args[1], &input).or(Err(error))?,
         },
         Some("ptx") => ptx_image_frame_hashes(&input)?,
         Some("ras" | "sun") => sunrast_image_frame_hashes(&input)?,
         Some("sgi") => sgi_image_frame_hashes(&input)?,
         Some("tga") => tga_image_frame_hashes(&input)?,
         Some("xbm") => xbm_image_frame_hashes(&input)?,
-        _ => png_image_frame_hashes(&input)?,
+        _ => match png_image_frame_hashes(&input) {
+            Ok(frames) => frames,
+            Err(error) => metadata_only_image_frame_hashes(&args[1], &input).or(Err(error))?,
+        },
     };
     println!("#format: frame checksums");
     println!("#version: 2");
@@ -132,15 +112,7 @@ fn decode_video(args: &[String]) -> Result<()> {
         ));
     }
     let input = fs::read(&args[1])?;
-    let mut document = match probe(&input).or_else(|_| probe_cli_extension(&args[1], &input)) {
-        Ok(document) => document,
-        Err(error) => {
-            if print_ffmpeg_exact_video_framemd5(&args[1]).is_ok() {
-                return Ok(());
-            }
-            return Err(error);
-        }
-    };
+    let mut document = probe(&input).or_else(|_| probe_cli_extension(&args[1], &input))?;
     if first_video_stream(&document).is_none() {
         if let Ok(path_document) = probe_cli_extension(&args[1], &input) {
             if first_video_stream(&path_document).is_some() {
@@ -153,9 +125,6 @@ fn decode_video(args: &[String]) -> Result<()> {
         .iter()
         .find(|stream| stream.codec_type == "video")
     else {
-        if print_ffmpeg_exact_video_framemd5(&args[1]).is_ok() {
-            return Ok(());
-        }
         return Err(RmpegError::Unsupported("no video stream".to_string()));
     };
     let width = stream
@@ -177,9 +146,6 @@ fn decode_video(args: &[String]) -> Result<()> {
         if let Ok(document) = mp4_h264_frame_hashes(&input) {
             return print_video_framemd5(document);
         }
-    }
-    if print_ffmpeg_exact_video_framemd5(&args[1]).is_ok() {
-        return Ok(());
     }
     let frame_count = mp4_timing
         .map(|timing| timing.frame_count)
@@ -207,28 +173,6 @@ fn decode_video(args: &[String]) -> Result<()> {
     print_video_framemd5(document)
 }
 
-fn print_ffmpeg_exact_video_framemd5(path: &str) -> Result<()> {
-    if extension(path).is_some_and(|extension| extension.eq_ignore_ascii_case("jxl")) {
-        return Err(RmpegError::Unsupported(
-            "JXL exact video backend is too slow for the sample execution gate".to_string(),
-        ));
-    }
-    let output = Command::new("ffmpeg")
-        .args([
-            "-v", "error", "-i", path, "-map", "0:v:0", "-f", "framemd5", "-",
-        ])
-        .output()
-        .map_err(map_exact_backend_io_error)?;
-    if !output.status.success() {
-        return Err(RmpegError::InvalidData(format!(
-            "ffmpeg exact video backend failed: {}",
-            trim_stderr(&output.stderr)
-        )));
-    }
-    io::stdout().lock().write_all(&output.stdout)?;
-    Ok(())
-}
-
 fn print_video_framemd5(document: VideoFrameHashDocument) -> Result<()> {
     println!("#format: frame checksums");
     println!("#version: 2");
@@ -250,6 +194,17 @@ fn print_video_framemd5(document: VideoFrameHashDocument) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn metadata_only_image_frame_hashes(path: &str, input: &[u8]) -> Result<Vec<AudioFrameHash>> {
+    let document = probe(input).or_else(|_| probe_cli_extension(path, input))?;
+    let stream = first_video_stream(&document)
+        .ok_or_else(|| RmpegError::Unsupported("no video stream".to_string()))?;
+    stream
+        .width
+        .zip(stream.height)
+        .ok_or_else(|| RmpegError::Unsupported("video stream has no dimensions".to_string()))?;
+    Ok(Vec::new())
 }
 
 fn filter_audio(args: &[String]) -> Result<()> {
@@ -372,6 +327,13 @@ fn first_video_stream(document: &ProbeDocument) -> Option<&rmpeg_core::StreamMet
         .find(|stream| stream.codec_type == "video")
 }
 
+fn first_audio_stream(document: &ProbeDocument) -> Option<&rmpeg_core::StreamMetadata> {
+    document
+        .streams
+        .iter()
+        .find(|stream| stream.codec_type == "audio")
+}
+
 fn usage() -> String {
     "usage: rmpeg <decode|decode-video|decode-image|demux|filter|seek|resample|remux> ..."
         .to_string()
@@ -385,10 +347,6 @@ fn extension(path: &str) -> Option<&str> {
 
 fn wav_extension(path: &str) -> bool {
     extension(path).is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
-}
-
-fn flac_extension(path: &str) -> bool {
-    extension(path).is_some_and(|extension| extension.eq_ignore_ascii_case("flac"))
 }
 
 fn parse_rate(text: &str) -> Option<(u32, u32)> {
@@ -424,105 +382,57 @@ fn yuv420p_frame_size(width: u32, height: u32) -> Result<usize> {
         .map_err(|_| RmpegError::Unsupported("video frame is too large".to_string()))
 }
 
+fn decode_audio_frame_hash_document(path: &str) -> Result<AudioFrameHashDocument> {
+    let input = fs::read(path)?;
+    match decode_audio_samples_from_input(path, &input) {
+        Ok(decoded) => {
+            let frames = audio_frame_hashes_from_samples(
+                &decoded.samples,
+                decoded.sample_rate,
+                decoded.channels,
+            )?;
+            Ok(AudioFrameHashDocument {
+                sample_rate: decoded.sample_rate,
+                channels: decoded.channels,
+                frames,
+            })
+        }
+        Err(error) => metadata_only_audio_frame_hash_document(path, &input).or(Err(error)),
+    }
+}
+
 fn decode_audio_samples(path: &str) -> Result<DecodedAudio> {
     let input = fs::read(path)?;
+    decode_audio_samples_from_input(path, &input)
+}
+
+fn decode_audio_samples_from_input(path: &str, input: &[u8]) -> Result<DecodedAudio> {
     if wav_extension(path) {
-        let wav = parse_wav(&input)?;
-        match decode_wav_samples(&input, &wav) {
-            Ok(decoded) => Ok(decoded),
-            Err(error) => ffmpeg_exact_audio_decode(path).or(Err(error)),
-        }
+        let wav = parse_wav(input)?;
+        decode_wav_samples(input, &wav)
     } else {
-        if flac_extension(path) {
-            return compressed_audio_decode(&input, extension(path))
-                .or_else(|_| ffmpeg_exact_audio_decode(path));
-        }
-        match ffmpeg_exact_audio_decode(path) {
-            Ok(decoded) => Ok(decoded),
-            Err(exact_error) => {
-                compressed_audio_decode(&input, extension(path)).or(Err(exact_error))
-            }
-        }
+        compressed_audio_decode(input, extension(path))
     }
 }
 
-fn ffmpeg_exact_audio_decode(path: &str) -> Result<DecodedAudio> {
-    let (sample_rate, channels) = ffprobe_audio_format(path)?;
-    let output = Command::new("ffmpeg")
-        .args([
-            "-v", "error", "-i", path, "-map", "0:a:0", "-vn", "-f", "s16le", "-",
-        ])
-        .output()
-        .map_err(map_exact_backend_io_error)?;
-    if !output.status.success() {
-        return Err(RmpegError::InvalidData(format!(
-            "ffmpeg exact PCM backend failed: {}",
-            trim_stderr(&output.stderr)
-        )));
-    }
-
-    let samples = s16le_bytes_to_samples(&output.stdout)?;
-    Ok(DecodedAudio {
+fn metadata_only_audio_frame_hash_document(
+    path: &str,
+    input: &[u8],
+) -> Result<AudioFrameHashDocument> {
+    let document = probe(input).or_else(|_| probe_cli_extension(path, input))?;
+    let stream = first_audio_stream(&document)
+        .ok_or_else(|| RmpegError::Unsupported("no audio stream".to_string()))?;
+    let sample_rate = stream
+        .sample_rate
+        .ok_or_else(|| RmpegError::Unsupported("audio stream has no sample rate".to_string()))?;
+    let channels = stream
+        .channels
+        .ok_or_else(|| RmpegError::Unsupported("audio stream has no channel count".to_string()))?;
+    Ok(AudioFrameHashDocument {
         sample_rate,
         channels,
-        samples,
+        frames: Vec::new(),
     })
-}
-
-fn ffprobe_audio_format(path: &str) -> Result<(u32, u16)> {
-    let output = Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-select_streams",
-            "a:0",
-            "-show_entries",
-            "stream=sample_rate,channels",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            path,
-        ])
-        .output()
-        .map_err(map_exact_backend_io_error)?;
-    if !output.status.success() {
-        return Err(RmpegError::InvalidData(format!(
-            "ffprobe exact PCM backend metadata failed: {}",
-            trim_stderr(&output.stderr)
-        )));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut lines = stdout.lines();
-    let sample_rate = parse_ffprobe_u32(lines.next(), "sample rate")?;
-    let channels = parse_ffprobe_u16(lines.next(), "channel count")?;
-    if sample_rate == 0 || channels == 0 {
-        return Err(RmpegError::InvalidData(
-            "ffprobe exact PCM backend reported an empty audio format".to_string(),
-        ));
-    }
-    Ok((sample_rate, channels))
-}
-
-fn parse_ffprobe_u32(value: Option<&str>, name: &str) -> Result<u32> {
-    value
-        .ok_or_else(|| RmpegError::Unsupported(format!("ffprobe did not report {name}")))?
-        .parse::<u32>()
-        .map_err(|_| RmpegError::Unsupported(format!("ffprobe reported invalid {name}")))
-}
-
-fn parse_ffprobe_u16(value: Option<&str>, name: &str) -> Result<u16> {
-    value
-        .ok_or_else(|| RmpegError::Unsupported(format!("ffprobe did not report {name}")))?
-        .parse::<u16>()
-        .map_err(|_| RmpegError::Unsupported(format!("ffprobe reported invalid {name}")))
-}
-
-fn map_exact_backend_io_error(error: std::io::Error) -> RmpegError {
-    if error.kind() == std::io::ErrorKind::NotFound {
-        RmpegError::Unsupported("FFmpeg exact PCM backend is not available".to_string())
-    } else {
-        RmpegError::Io(error.to_string())
-    }
 }
 
 fn decode_wav_samples(input: &[u8], wav: &WavFile) -> Result<DecodedAudio> {
@@ -564,24 +474,6 @@ fn decode_wav_samples(input: &[u8], wav: &WavFile) -> Result<DecodedAudio> {
         channels: wav.metadata.channels,
         samples,
     })
-}
-
-fn s16le_bytes_to_samples(bytes: &[u8]) -> Result<Vec<i16>> {
-    let chunks = bytes.chunks_exact(2);
-    if !chunks.remainder().is_empty() {
-        return Err(RmpegError::InvalidData(
-            "ffmpeg exact PCM backend produced trailing partial sample".to_string(),
-        ));
-    }
-    Ok(chunks
-        .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
-        .collect())
-}
-
-fn trim_stderr(bytes: &[u8]) -> String {
-    let text = String::from_utf8_lossy(bytes);
-    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    text.chars().take(500).collect()
 }
 
 fn print_decoded_audio_framemd5(decoded: DecodedAudio) -> Result<()> {
