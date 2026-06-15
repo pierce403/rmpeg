@@ -306,6 +306,10 @@ fn wav_extension(path: &str) -> bool {
     extension(path).is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
 }
 
+fn avi_extension(path: &str) -> bool {
+    extension(path).is_some_and(|extension| extension.eq_ignore_ascii_case("avi"))
+}
+
 fn raw_s16le_extension(path: &str) -> bool {
     extension(path).is_some_and(|extension| extension.eq_ignore_ascii_case("sw"))
 }
@@ -345,6 +349,11 @@ fn yuv420p_frame_size(width: u32, height: u32) -> Result<usize> {
 
 fn decode_audio_frame_hash_document(path: &str) -> Result<AudioFrameHashDocument> {
     let input = fs::read(path)?;
+    if avi_extension(path) {
+        if let Ok(document) = avi_pcm_frame_hash_document(path, &input) {
+            return Ok(document);
+        }
+    }
     match decode_audio_samples_from_input(path, &input) {
         Ok(decoded) => {
             let frames = audio_frame_hashes_from_samples(
@@ -360,6 +369,226 @@ fn decode_audio_frame_hash_document(path: &str) -> Result<AudioFrameHashDocument
         }
         Err(error) => metadata_only_audio_frame_hash_document(path, &input).or(Err(error)),
     }
+}
+
+fn avi_pcm_frame_hash_document(path: &str, input: &[u8]) -> Result<AudioFrameHashDocument> {
+    let document = probe_path(path, input)?;
+    if document.format != "avi" {
+        return Err(RmpegError::Unsupported(
+            "AVI PCM decode requires AVI probe metadata".to_string(),
+        ));
+    }
+    let stream = first_audio_stream(&document)
+        .ok_or_else(|| RmpegError::Unsupported("no audio stream".to_string()))?;
+    if stream.codec_name != "pcm_s16le" && stream.codec_name != "pcm_u8" {
+        return Err(RmpegError::Unsupported(format!(
+            "AVI audio codec {} is not supported PCM",
+            stream.codec_name
+        )));
+    }
+    let sample_rate = stream
+        .sample_rate
+        .ok_or_else(|| RmpegError::Unsupported("audio stream has no sample rate".to_string()))?;
+    let channels = stream
+        .channels
+        .ok_or_else(|| RmpegError::Unsupported("audio stream has no channel count".to_string()))?;
+    let frames = avi_pcm_frames(input, stream.index, &stream.codec_name, channels)?;
+    Ok(AudioFrameHashDocument {
+        sample_rate,
+        channels,
+        frames,
+    })
+}
+
+fn avi_pcm_frames(
+    input: &[u8],
+    target_stream_index: usize,
+    codec_name: &str,
+    channels: u16,
+) -> Result<Vec<AudioFrameHash>> {
+    let (movi_start, movi_end) = avi_movi_range(input)?;
+    let mut chunks = Vec::new();
+    collect_avi_audio_chunks(
+        input,
+        movi_start,
+        movi_end,
+        target_stream_index,
+        &mut chunks,
+    )?;
+
+    let frame_bytes = usize::from(channels)
+        .checked_mul(2)
+        .ok_or_else(|| RmpegError::InvalidData("AVI PCM block align overflow".to_string()))?;
+    if frame_bytes == 0 {
+        return Err(RmpegError::InvalidData(
+            "AVI PCM stream has zero channels".to_string(),
+        ));
+    }
+
+    let mut frames = Vec::new();
+    let mut pts = 0_u64;
+    for chunk in chunks {
+        let payload = match codec_name {
+            "pcm_s16le" => {
+                if chunk.len() % 2 != 0 {
+                    return Err(RmpegError::InvalidData(
+                        "AVI s16le chunk has trailing partial sample".to_string(),
+                    ));
+                }
+                chunk.to_vec()
+            }
+            "pcm_u8" => pcm_u8_to_s16le_bytes(chunk),
+            _ => {
+                return Err(RmpegError::Unsupported(format!(
+                    "AVI audio codec {codec_name} is not supported PCM"
+                )))
+            }
+        };
+        if payload.len() % frame_bytes != 0 {
+            return Err(RmpegError::InvalidData(
+                "AVI PCM chunk is not channel-aligned".to_string(),
+            ));
+        }
+        if payload.is_empty() {
+            continue;
+        }
+        let samples_per_output = match codec_name {
+            "pcm_s16le" => 256,
+            _ => payload.len() / frame_bytes,
+        };
+        let max_output_bytes = samples_per_output
+            .checked_mul(frame_bytes)
+            .ok_or_else(|| RmpegError::InvalidData("AVI PCM frame size overflow".to_string()))?;
+        for output in payload.chunks(max_output_bytes) {
+            let duration = output.len() / frame_bytes;
+            if duration == 0 {
+                continue;
+            }
+            let duration = u32::try_from(duration).map_err(|_| {
+                RmpegError::Unsupported("AVI PCM chunk duration is too large".to_string())
+            })?;
+            frames.push(AudioFrameHash {
+                stream_index: 0,
+                dts: pts,
+                pts,
+                duration,
+                size: output.len(),
+                hash: md5_hex(output),
+            });
+            pts += u64::from(duration);
+        }
+    }
+    Ok(frames)
+}
+
+fn avi_movi_range(input: &[u8]) -> Result<(usize, usize)> {
+    if input.len() < 12 || &input[0..4] != b"RIFF" || &input[8..12] != b"AVI " {
+        return Err(RmpegError::InvalidData(
+            "input is not an AVI RIFF file".to_string(),
+        ));
+    }
+    let mut offset = 12;
+    while offset + 8 <= input.len() {
+        let id = &input[offset..offset + 4];
+        let size = read_u32_le_at(input, offset + 4)? as usize;
+        let data_start = offset + 8;
+        let data_end = data_start
+            .checked_add(size)
+            .ok_or_else(|| RmpegError::InvalidData("AVI chunk range overflow".to_string()))?;
+        if data_end > input.len() {
+            return Err(RmpegError::UnexpectedEof {
+                needed: data_end,
+                remaining: input.len(),
+            });
+        }
+        if id == b"LIST" && size >= 4 && &input[data_start..data_start + 4] == b"movi" {
+            return Ok((data_start + 4, data_end));
+        }
+        offset = padded_avi_chunk_end(data_end)?;
+    }
+    Err(RmpegError::Unsupported(
+        "AVI file has no movi list".to_string(),
+    ))
+}
+
+fn collect_avi_audio_chunks<'a>(
+    input: &'a [u8],
+    start: usize,
+    end: usize,
+    target_stream_index: usize,
+    chunks: &mut Vec<&'a [u8]>,
+) -> Result<()> {
+    let mut offset = start;
+    while offset + 8 <= end {
+        let id = &input[offset..offset + 4];
+        let size = read_u32_le_at(input, offset + 4)? as usize;
+        let data_start = offset + 8;
+        let data_end = data_start
+            .checked_add(size)
+            .ok_or_else(|| RmpegError::InvalidData("AVI chunk range overflow".to_string()))?;
+        if data_end > end || data_end > input.len() {
+            if id == b"idx1" {
+                break;
+            }
+            return Err(RmpegError::UnexpectedEof {
+                needed: data_end,
+                remaining: input.len().min(end),
+            });
+        }
+        if id == b"LIST" {
+            if size >= 4 {
+                collect_avi_audio_chunks(
+                    input,
+                    data_start + 4,
+                    data_end,
+                    target_stream_index,
+                    chunks,
+                )?;
+            }
+        } else if avi_chunk_stream_index(id, b"wb") == Some(target_stream_index) {
+            chunks.push(&input[data_start..data_end]);
+        }
+        offset = padded_avi_chunk_end(data_end)?;
+    }
+    Ok(())
+}
+
+fn avi_chunk_stream_index(id: &[u8], suffix: &[u8; 2]) -> Option<usize> {
+    if id.len() != 4 || &id[2..4] != suffix {
+        return None;
+    }
+    let tens = id[0].checked_sub(b'0')?;
+    let ones = id[1].checked_sub(b'0')?;
+    if tens > 9 || ones > 9 {
+        return None;
+    }
+    Some(usize::from(tens) * 10 + usize::from(ones))
+}
+
+fn padded_avi_chunk_end(data_end: usize) -> Result<usize> {
+    data_end
+        .checked_add(data_end % 2)
+        .ok_or_else(|| RmpegError::InvalidData("AVI padded chunk range overflow".to_string()))
+}
+
+fn read_u32_le_at(input: &[u8], offset: usize) -> Result<u32> {
+    let end = offset
+        .checked_add(4)
+        .ok_or_else(|| RmpegError::InvalidData("u32 read range overflow".to_string()))?;
+    let bytes = input.get(offset..end).ok_or(RmpegError::UnexpectedEof {
+        needed: end,
+        remaining: input.len(),
+    })?;
+    Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
+fn pcm_u8_to_s16le_bytes(input: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(input.len() * 2);
+    for byte in input {
+        let sample = (i16::from(*byte) - 128) << 8;
+        output.extend_from_slice(&sample.to_le_bytes());
+    }
+    output
 }
 
 fn decode_audio_samples(path: &str) -> Result<DecodedAudio> {
@@ -778,9 +1007,10 @@ fn wav_pipe_bytes(decoded: &DecodedAudio) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        channel_layout_name, decimal_seconds_to_samples, decode_s16le_sample_bytes, parse_rate,
-        resample_windowed_sinc, scale_s16_volume, swr_edge_index, swr_filter_tap_count,
-        video_frame_count, wav_pipe_bytes, yuv420p_frame_size, DecodedAudio,
+        avi_chunk_stream_index, channel_layout_name, decimal_seconds_to_samples,
+        decode_s16le_sample_bytes, parse_rate, pcm_u8_to_s16le_bytes, resample_windowed_sinc,
+        scale_s16_volume, swr_edge_index, swr_filter_tap_count, video_frame_count, wav_pipe_bytes,
+        yuv420p_frame_size, DecodedAudio,
     };
 
     #[test]
@@ -818,6 +1048,22 @@ mod tests {
             vec![1, i16::MIN, i16::MAX]
         );
         assert!(decode_s16le_sample_bytes(&[0x01]).is_err());
+    }
+
+    #[test]
+    fn avi_stream_chunk_ids_are_decimal_with_audio_suffix() {
+        assert_eq!(avi_chunk_stream_index(b"01wb", b"wb"), Some(1));
+        assert_eq!(avi_chunk_stream_index(b"12wb", b"wb"), Some(12));
+        assert_eq!(avi_chunk_stream_index(b"01dc", b"wb"), None);
+        assert_eq!(avi_chunk_stream_index(b"A1wb", b"wb"), None);
+    }
+
+    #[test]
+    fn converts_avi_unsigned_pcm_to_signed_s16le() {
+        assert_eq!(
+            pcm_u8_to_s16le_bytes(&[0x00, 0x80, 0xff]),
+            vec![0x00, 0x80, 0x00, 0x00, 0x00, 0x7f]
+        );
     }
 
     #[test]

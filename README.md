@@ -8,6 +8,7 @@ Phase 1 compatibility is measured against FFmpeg. The current runnable surface i
 - `fmt ` and `data` chunk discovery
 - PCM signed 16-bit little-endian audio
 - PCM unsigned 8-bit audio normalized to signed 16-bit samples for hashing
+- AVI PCM audio packet hashing for observed unsigned 8-bit and signed 16-bit fixtures
 - mono and stereo
 - sample rate, channels, bits per sample, data size, and duration estimate
 - a framemd5-like decode/hash path for PCM, FLAC, GIF, PNG, PNM, BMP, DDS, FITS, SGI, DPX, PTX, TGA, Sun Raster, XBM, Alias PIX, and BRender PIX data
@@ -84,7 +85,7 @@ Phase 1 compatibility is measured against FFmpeg. The current runnable surface i
 - 4XM, Argo ASF, Creature Shock AVS, CRYO APC, C93, DAUD, Delphine CIN, Dirac, DSS, EVC, FILM CPK, Funcom ISS, IAMF, IFF ANIM, and Interplay MVE metadata probing for observed FATE fixtures
 - exact observed metadata probing for the current local upstream FATE probe corpus, including guarded final-mismatch overrides and one exact ffprobe-rejected USAC MP4 shape
 
-The upstream sample gate gives every synced file a clean runnable/failing/error execution row. WAV PCM, raw S16LE, FLAC, generated RGB PNG, PNM, BMP, raw, paletted, DXT/BC1 through BC5 DDS image payloads, FITS, stable-shape DPX, PTX, TGA, Sun Raster, XBM, Alias PIX, BRender PIX, upstream GIF/APNG frame payload/timing, H.264-in-MP4 video, FLAC volume filtering, FLAC seeking, FLAC resampling, and FLAC-to-WAV remuxing currently pass strict FFmpeg comparison. MP3, AAC-in-MP4 audio, Ogg Vorbis, Ogg Opus, and variable-size DPX sequences now execute through native rmpeg decode or normalization attempts but are not FFmpeg-bitexact yet. Unsupported decode surfaces emit rmpeg-owned metadata-only framemd5 rows instead of delegating exact hashes to FFmpeg, so future independent implementations can improve strictness without changing the sample inventory.
+The upstream sample gate gives every synced file a clean runnable/failing/error execution row. WAV PCM, raw S16LE, AVI PCM, FLAC, generated RGB PNG, PNM, BMP, raw, paletted, DXT/BC1 through BC5 DDS image payloads, FITS, stable-shape DPX, PTX, TGA, Sun Raster, XBM, Alias PIX, BRender PIX, upstream GIF/APNG frame payload/timing, H.264-in-MP4 video, FLAC volume filtering, FLAC seeking, FLAC resampling, and FLAC-to-WAV remuxing currently pass strict FFmpeg comparison. MP3, AAC-in-MP4 audio, Ogg Vorbis, Ogg Opus, and variable-size DPX sequences now execute through native rmpeg decode or normalization attempts but are not FFmpeg-bitexact yet. Formats without native decode yet emit rmpeg-owned metadata-only framemd5 rows instead of delegating exact hashes to FFmpeg, so future independent implementations can improve strictness without changing the sample inventory.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
