@@ -192,7 +192,7 @@ pub use pictor::parse_pictor;
 pub use png::parse_png;
 pub use pnm::parse_pnm;
 pub use pp_bnk::parse_pp_bnk;
-pub use probe::probe;
+pub use probe::{probe, probe_path};
 pub use psd::parse_psd;
 pub use psxstr::parse_psxstr;
 pub use ptx::parse_ptx;

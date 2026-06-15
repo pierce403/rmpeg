@@ -1,15 +1,7 @@
 use std::{env, fs, process};
 
 use rmpeg_core::{ProbeDocument, Result, RmpegError, StreamMetadata};
-use rmpeg_format::{
-    parse_act, parse_aea, parse_alg_mm, parse_alias_pix, parse_bintext, parse_bmv, parse_cdg,
-    parse_cdxl, parse_creatureshock_avs, parse_cyberia_c93, parse_daud, parse_delphine_cin,
-    parse_ea_cdata, parse_evc, parse_funcom_iss, parse_imf_cpl, parse_jxl, parse_mimic_cam,
-    parse_observed_extension_media, parse_pgs_sup, parse_pict, parse_pp_bnk,
-    parse_raw_ac3_or_eac3_scanning, parse_raw_adp_dtk, parse_raw_adp_dtk_dec,
-    parse_raw_adp_dtk_pcm, parse_raw_g722, parse_raw_g723_1, parse_raw_g728, parse_txd,
-    parse_vc1_rcv, parse_vmd, parse_vobsub_mpeg, parse_westwood_aud, parse_xface, probe,
-};
+use rmpeg_format::probe_path;
 
 fn main() {
     if let Err(error) = run() {
@@ -30,99 +22,10 @@ fn run() -> Result<()> {
     }
 
     let input = fs::read(&path)?;
-    let document = match probe_preferred_extension(&path, &input) {
-        Ok(document) => document,
-        Err(_) => match probe(&input) {
-            Ok(document) => document,
-            Err(error) => probe_raw_extension(&path, &input).map_err(|_| error)?,
-        },
-    };
+    let document = probe_path(&path, &input)?;
     print_probe_json(&document);
 
     Ok(())
-}
-
-fn probe_preferred_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
-    let extension = preferred_extension_lowercase(path);
-    match extension.as_str() {
-        "" => parse_observed_extension_media(&extension, input),
-        "264" | "aac" | "adts" | "asf" => parse_observed_extension_media(&extension, input),
-        "act" => parse_act(input),
-        "avi" => parse_observed_extension_media(&extension, input),
-        "ape" | "bit" | "eac3" | "flv" | "hif" | "ism" | "ivf" | "jpg" | "m4a" | "mkv" | "mov"
-        | "mp3" | "mp4" | "mpg" | "mtv" | "mxg" | "ogg" | "opus" | "thd" | "trec" | "ts"
-        | "vp7" | "wav" | "wma" | "wmv" | "wv" => parse_observed_extension_media(&extension, input),
-        _ => Err(RmpegError::InvalidData(
-            "unsupported preferred extension".to_string(),
-        )),
-    }
-}
-
-fn probe_raw_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
-    let extension = extension_lowercase(path)?;
-
-    match extension.as_str() {
-        "ac3" | "eac3" => parse_raw_ac3_or_eac3_scanning(input),
-        "aea" => parse_aea(input),
-        "bin" => parse_bintext(input),
-        "avs" => parse_creatureshock_avs(input),
-        "c93" => parse_cyberia_c93(input),
-        "cdg" => parse_cdg(input),
-        "cdxl" => parse_cdxl(input),
-        "cdata" => parse_ea_cdata(input),
-        "bmv" => parse_bmv(input),
-        "cam" => parse_mimic_cam(input),
-        "302" => parse_daud(input),
-        "cin" => parse_delphine_cin(input),
-        "evc" => parse_evc(input),
-        "iss" => parse_funcom_iss(input),
-        "xml" => parse_imf_cpl(input),
-        "jxl" => parse_jxl(input),
-        "asf" | "avi" | "bit" | "divx" | "f32" | "flv" | "m4v" | "mkv" | "mov" | "mp4" | "mpg"
-        | "mvi" | "obu" | "ogg" | "pva" | "rmvb" | "rsd" | "s16" | "seq" | "smv" | "sw" | "ts"
-        | "vob" | "vvc" | "webm" | "xesc" => parse_observed_extension_media(&extension, input),
-        "mm" => parse_alg_mm(input),
-        "sup" => parse_pgs_sup(input),
-        "sub" => parse_vobsub_mpeg(input),
-        "pct" | "pict" => parse_pict(input),
-        "vmd" => parse_vmd(input),
-        "txd" => parse_txd(input),
-        "rcv" => parse_vc1_rcv(input),
-        "pix" => parse_alias_pix(input),
-        "adp" => parse_raw_adp_dtk(input),
-        "dec" => parse_raw_adp_dtk_dec(input),
-        "pcm" => parse_observed_extension_media(&extension, input)
-            .or_else(|_| parse_raw_adp_dtk_pcm(input)),
-        "aud" => parse_westwood_aud(input),
-        "5c" | "11c" | "44c" => parse_pp_bnk(input),
-        "g722" => parse_raw_g722(input),
-        "g728" => parse_raw_g728(input),
-        "tco" => parse_raw_g723_1(input),
-        "xface" => parse_xface(input),
-        _ => Err(RmpegError::InvalidData(
-            "unsupported raw audio extension".to_string(),
-        )),
-    }
-}
-
-fn preferred_extension_lowercase(path: &str) -> String {
-    std::path::Path::new(path)
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase()
-}
-
-fn extension_lowercase(path: &str) -> Result<String> {
-    let Some(extension) = std::path::Path::new(path)
-        .extension()
-        .and_then(|extension| extension.to_str())
-    else {
-        return Err(RmpegError::InvalidData(
-            "unsupported raw audio extension".to_string(),
-        ));
-    };
-    Ok(extension.to_ascii_lowercase())
 }
 
 fn print_probe_json(document: &ProbeDocument) {

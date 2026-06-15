@@ -13,12 +13,7 @@ use rmpeg_codec::{
     xbm_image_frame_hashes, AudioFrameHashDocument, DecodedAudio, VideoFrameHashDocument,
 };
 use rmpeg_core::{AudioFrameHash, ProbeDocument, Result, RmpegError};
-use rmpeg_format::{
-    parse_alias_pix, parse_bintext, parse_cdg, parse_cdxl, parse_evc, parse_imf_cpl,
-    parse_mimic_cam, parse_mp4_video_timing, parse_observed_extension_media, parse_pgs_sup,
-    parse_pict, parse_txd, parse_vc1_rcv, parse_vobsub_mpeg, parse_wav, parse_xface, probe,
-    WavFile,
-};
+use rmpeg_format::{parse_mp4_video_timing, parse_wav, probe_path, WavFile};
 
 const FFMPEG_WAV_PIPE_ENCODER: &[u8] = b"Lavf62.3.100\0";
 
@@ -112,14 +107,7 @@ fn decode_video(args: &[String]) -> Result<()> {
         ));
     }
     let input = fs::read(&args[1])?;
-    let mut document = probe(&input).or_else(|_| probe_cli_extension(&args[1], &input))?;
-    if first_video_stream(&document).is_none() {
-        if let Ok(path_document) = probe_cli_extension(&args[1], &input) {
-            if first_video_stream(&path_document).is_some() {
-                document = path_document;
-            }
-        }
-    }
+    let document = probe_path(&args[1], &input)?;
     let Some(stream) = document
         .streams
         .iter()
@@ -197,7 +185,7 @@ fn print_video_framemd5(document: VideoFrameHashDocument) -> Result<()> {
 }
 
 fn metadata_only_image_frame_hashes(path: &str, input: &[u8]) -> Result<Vec<AudioFrameHash>> {
-    let document = probe(input).or_else(|_| probe_cli_extension(path, input))?;
+    let document = probe_path(path, input)?;
     let stream = first_video_stream(&document)
         .ok_or_else(|| RmpegError::Unsupported("no video stream".to_string()))?;
     stream
@@ -282,42 +270,7 @@ fn demux_streams(args: &[String]) -> Result<()> {
         ));
     }
     let input = fs::read(&args[1])?;
-    probe(&input)
-        .or_else(|_| probe_cli_extension(&args[1], &input))
-        .map(|_| ())
-}
-
-fn probe_cli_extension(path: &str, input: &[u8]) -> Result<ProbeDocument> {
-    match extension(path).map(str::to_ascii_lowercase).as_deref() {
-        Some("") => parse_observed_extension_media("", input),
-        Some(extension @ ("264" | "aac" | "adts" | "asf" | "avi")) => {
-            parse_observed_extension_media(extension, input)
-        }
-        Some(
-            extension @ ("ape" | "bit" | "divx" | "eac3" | "f32" | "flv" | "hif" | "ism" | "ivf"
-            | "jpg" | "m4a" | "m4v" | "mkv" | "mov" | "mp3" | "mp4" | "mpg" | "mtv"
-            | "mvi" | "mxg" | "obu" | "ogg" | "opus" | "pva" | "rmvb" | "rsd" | "s16"
-            | "seq" | "smv" | "sw" | "thd" | "trec" | "ts" | "vob" | "vp7" | "wav"
-            | "webm" | "wma" | "wmv" | "wv" | "xesc"),
-        ) => parse_observed_extension_media(extension, input),
-        Some("bin") => parse_bintext(input),
-        Some("cam") => parse_mimic_cam(input),
-        Some("cdg") => parse_cdg(input),
-        Some("cdxl") => parse_cdxl(input),
-        Some("evc") => parse_evc(input),
-        Some("pct" | "pict") => parse_pict(input),
-        Some("pix") => parse_alias_pix(input),
-        Some("rcv") => parse_vc1_rcv(input),
-        Some("sup") => parse_pgs_sup(input),
-        Some("sub") => parse_vobsub_mpeg(input),
-        Some("txd") => parse_txd(input),
-        Some("vvc") => parse_observed_extension_media("vvc", input),
-        Some("xface") => parse_xface(input),
-        Some("xml") => parse_imf_cpl(input),
-        _ => Err(RmpegError::InvalidData(
-            "unsupported CLI extension probe".to_string(),
-        )),
-    }
+    probe_path(&args[1], &input).map(|_| ())
 }
 
 fn first_video_stream(document: &ProbeDocument) -> Option<&rmpeg_core::StreamMetadata> {
@@ -419,7 +372,7 @@ fn metadata_only_audio_frame_hash_document(
     path: &str,
     input: &[u8],
 ) -> Result<AudioFrameHashDocument> {
-    let document = probe(input).or_else(|_| probe_cli_extension(path, input))?;
+    let document = probe_path(path, input)?;
     let stream = first_audio_stream(&document)
         .ok_or_else(|| RmpegError::Unsupported("no audio stream".to_string()))?;
     let sample_rate = stream
