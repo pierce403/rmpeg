@@ -10,7 +10,7 @@ Phase 1 compatibility is measured against FFmpeg. The current runnable surface i
 - PCM unsigned 8-bit audio normalized to signed 16-bit samples for hashing
 - mono and stereo
 - sample rate, channels, bits per sample, data size, and duration estimate
-- a framemd5-like decode/hash path for PCM, FLAC, PNG, PNM, BMP, DDS, FITS, SGI, DPX, PTX, TGA, Sun Raster, XBM, Alias PIX, and BRender PIX data
+- a framemd5-like decode/hash path for PCM, FLAC, GIF, PNG, PNM, BMP, DDS, FITS, SGI, DPX, PTX, TGA, Sun Raster, XBM, Alias PIX, and BRender PIX data
 - mirrored decode/hash attempts for every generated audio sample, plus executed video decode, image decode, filter, seek, resample, and remux compatibility rows
 - MP3 frame-header metadata probing
 - raw AC-3 and E-AC-3 metadata probing
@@ -37,7 +37,7 @@ Phase 1 compatibility is measured against FFmpeg. The current runnable surface i
 - extension-gated raw G.722 and G.723.1 audio metadata probing
 - extension-gated PP_BNK soundbank metadata probing
 - extension-gated CDXL video/audio metadata probing
-- GIF image/animation metadata probing
+- GIF image/animation metadata probing and native animated GIF frame payload hashing
 - DPX image metadata probing
 - FLIC animation and RenderWare TXD image metadata probing
 - FITS image metadata probing
@@ -84,7 +84,7 @@ Phase 1 compatibility is measured against FFmpeg. The current runnable surface i
 - 4XM, Argo ASF, Creature Shock AVS, CRYO APC, C93, DAUD, Delphine CIN, Dirac, DSS, EVC, FILM CPK, Funcom ISS, IAMF, IFF ANIM, and Interplay MVE metadata probing for observed FATE fixtures
 - exact observed metadata probing for the current local upstream FATE probe corpus, including guarded final-mismatch overrides and one exact ffprobe-rejected USAC MP4 shape
 
-The upstream sample gate gives every synced file a clean runnable/failing/error execution row. WAV PCM, FLAC, generated RGB PNG, PNM, BMP, raw, paletted, DXT/BC1 through BC5 DDS image payloads, FITS, stable-shape DPX, PTX, TGA, Sun Raster, XBM, Alias PIX, BRender PIX, H.264-in-MP4 video, FLAC volume filtering, FLAC seeking, FLAC resampling, and FLAC-to-WAV remuxing currently pass strict FFmpeg comparison. Observed upstream APNG frame payload hashes now execute natively and match FFmpeg for the synced APNG fixtures, with exact APNG framemd5 timing still tracked separately from payload decoding. MP3, AAC-in-MP4 audio, Ogg Vorbis, Ogg Opus, and variable-size DPX sequences now execute through native rmpeg decode or normalization attempts but are not FFmpeg-bitexact yet. Unsupported decode surfaces emit rmpeg-owned metadata-only framemd5 rows instead of delegating exact hashes to FFmpeg, so future independent implementations can improve strictness without changing the sample inventory.
+The upstream sample gate gives every synced file a clean runnable/failing/error execution row. WAV PCM, FLAC, generated RGB PNG, PNM, BMP, raw, paletted, DXT/BC1 through BC5 DDS image payloads, FITS, stable-shape DPX, PTX, TGA, Sun Raster, XBM, Alias PIX, BRender PIX, H.264-in-MP4 video, FLAC volume filtering, FLAC seeking, FLAC resampling, and FLAC-to-WAV remuxing currently pass strict FFmpeg comparison. Observed upstream GIF and APNG frame payload hashes now execute natively and match FFmpeg for the synced fixtures, with exact GIF/APNG framemd5 timing still tracked separately from payload decoding. MP3, AAC-in-MP4 audio, Ogg Vorbis, Ogg Opus, and variable-size DPX sequences now execute through native rmpeg decode or normalization attempts but are not FFmpeg-bitexact yet. Unsupported decode surfaces emit rmpeg-owned metadata-only framemd5 rows instead of delegating exact hashes to FFmpeg, so future independent implementations can improve strictness without changing the sample inventory.
 
 FFmpeg is used as the behavior oracle. This project does not copy or mechanically translate FFmpeg C source.
 
