@@ -306,6 +306,10 @@ fn wav_extension(path: &str) -> bool {
     extension(path).is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
 }
 
+fn raw_s16le_extension(path: &str) -> bool {
+    extension(path).is_some_and(|extension| extension.eq_ignore_ascii_case("sw"))
+}
+
 fn parse_rate(text: &str) -> Option<(u32, u32)> {
     let (num, den) = text.split_once('/')?;
     let num = num.parse::<u32>().ok()?;
@@ -367,6 +371,8 @@ fn decode_audio_samples_from_input(path: &str, input: &[u8]) -> Result<DecodedAu
     if wav_extension(path) {
         let wav = parse_wav(input)?;
         decode_wav_samples(input, &wav)
+    } else if raw_s16le_extension(path) {
+        decode_raw_s16le_samples(path, input)
     } else {
         compressed_audio_decode(input, extension(path))
     }
@@ -431,6 +437,43 @@ fn decode_wav_samples(input: &[u8], wav: &WavFile) -> Result<DecodedAudio> {
         channels: wav.metadata.channels,
         samples,
     })
+}
+
+fn decode_raw_s16le_samples(path: &str, input: &[u8]) -> Result<DecodedAudio> {
+    let document = probe_path(path, input)?;
+    let stream = first_audio_stream(&document)
+        .ok_or_else(|| RmpegError::Unsupported("no audio stream".to_string()))?;
+    if document.format != "s16le"
+        || stream.codec_name != "pcm_s16le"
+        || stream.bits_per_sample != Some(16)
+    {
+        return Err(RmpegError::Unsupported(
+            "raw s16le decode requires an s16le pcm_s16le probe".to_string(),
+        ));
+    }
+    let sample_rate = stream
+        .sample_rate
+        .ok_or_else(|| RmpegError::Unsupported("audio stream has no sample rate".to_string()))?;
+    let channels = stream
+        .channels
+        .ok_or_else(|| RmpegError::Unsupported("audio stream has no channel count".to_string()))?;
+    Ok(DecodedAudio {
+        sample_rate,
+        channels,
+        samples: decode_s16le_sample_bytes(input)?,
+    })
+}
+
+fn decode_s16le_sample_bytes(input: &[u8]) -> Result<Vec<i16>> {
+    let chunks = input.chunks_exact(2);
+    if !chunks.remainder().is_empty() {
+        return Err(RmpegError::InvalidData(
+            "raw s16le input has trailing partial sample".to_string(),
+        ));
+    }
+    Ok(chunks
+        .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+        .collect())
 }
 
 fn print_decoded_audio_framemd5(decoded: DecodedAudio) -> Result<()> {
@@ -735,9 +778,9 @@ fn wav_pipe_bytes(decoded: &DecodedAudio) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        channel_layout_name, decimal_seconds_to_samples, parse_rate, resample_windowed_sinc,
-        scale_s16_volume, swr_edge_index, swr_filter_tap_count, video_frame_count, wav_pipe_bytes,
-        yuv420p_frame_size, DecodedAudio,
+        channel_layout_name, decimal_seconds_to_samples, decode_s16le_sample_bytes, parse_rate,
+        resample_windowed_sinc, scale_s16_volume, swr_edge_index, swr_filter_tap_count,
+        video_frame_count, wav_pipe_bytes, yuv420p_frame_size, DecodedAudio,
     };
 
     #[test]
@@ -766,6 +809,15 @@ mod tests {
         assert_eq!(channel_layout_name(1), Some("mono"));
         assert_eq!(channel_layout_name(2), Some("stereo"));
         assert_eq!(channel_layout_name(6), None);
+    }
+
+    #[test]
+    fn decodes_raw_s16le_sample_bytes() {
+        assert_eq!(
+            decode_s16le_sample_bytes(&[0x01, 0x00, 0x00, 0x80, 0xff, 0x7f]).unwrap(),
+            vec![1, i16::MIN, i16::MAX]
+        );
+        assert!(decode_s16le_sample_bytes(&[0x01]).is_err());
     }
 
     #[test]
