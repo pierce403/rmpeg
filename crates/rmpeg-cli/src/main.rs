@@ -14,7 +14,10 @@ use rmpeg_codec::{
     AudioFrameHashDocument, DecodedAudio, VideoFrameHashDocument,
 };
 use rmpeg_core::{AudioFrameHash, ProbeDocument, Result, RmpegError};
-use rmpeg_format::{parse_mp4_video_timing, parse_wav, probe_path, WavFile};
+use rmpeg_format::{
+    extract_mp4_pcm_samples, parse_mp4_video_timing, parse_wav, probe_path, Mp4PcmSampleData,
+    WavFile,
+};
 
 const FFMPEG_WAV_PIPE_ENCODER: &[u8] = b"Lavf62.3.100\0";
 
@@ -354,6 +357,9 @@ fn decode_audio_frame_hash_document(path: &str) -> Result<AudioFrameHashDocument
             return Ok(document);
         }
     }
+    if let Ok(Some(samples)) = extract_mp4_pcm_samples(&input) {
+        return mp4_pcm_frame_hash_document(samples);
+    }
     match decode_audio_samples_from_input(path, &input) {
         Ok(decoded) => {
             let frames = audio_frame_hashes_from_samples(
@@ -430,7 +436,7 @@ fn avi_pcm_frames(
     for chunk in chunks {
         let payload = match codec_name {
             "pcm_s16le" => {
-                if chunk.len() % 2 != 0 {
+                if !chunk.len().is_multiple_of(2) {
                     return Err(RmpegError::InvalidData(
                         "AVI s16le chunk has trailing partial sample".to_string(),
                     ));
@@ -696,6 +702,121 @@ fn decode_s32le_sample_bytes(input: &[u8]) -> Result<Vec<i16>> {
 fn s24le_to_s16(chunk: &[u8]) -> i16 {
     let sign = if chunk[2] & 0x80 == 0 { 0x00 } else { 0xff };
     (i32::from_le_bytes([chunk[0], chunk[1], chunk[2], sign]) >> 8) as i16
+}
+
+fn mp4_pcm_frame_hash_document(samples: Mp4PcmSampleData) -> Result<AudioFrameHashDocument> {
+    let channels = samples.channels;
+    let frame_bytes = usize::from(channels)
+        .checked_mul(2)
+        .ok_or_else(|| RmpegError::InvalidData("MP4 PCM block align overflow".to_string()))?;
+    if frame_bytes == 0 {
+        return Err(RmpegError::InvalidData(
+            "MP4 PCM stream has zero channels".to_string(),
+        ));
+    }
+
+    let max_output_bytes = 1024_usize
+        .checked_mul(frame_bytes)
+        .ok_or_else(|| RmpegError::InvalidData("MP4 PCM output frame overflow".to_string()))?;
+    let mut frames = Vec::new();
+    let mut pts = 0_u64;
+    let chunk_count = samples.chunks.len();
+    for (chunk_index, chunk) in samples.chunks.into_iter().enumerate() {
+        let mut decoded = Vec::new();
+        append_mp4_pcm_chunk(&mut decoded, &samples.codec_name, &chunk.data)?;
+        let expected_len = (chunk.duration as usize)
+            .checked_mul(frame_bytes)
+            .ok_or_else(|| RmpegError::InvalidData("MP4 PCM decoded size overflow".to_string()))?;
+        if decoded.len() != expected_len {
+            return Err(RmpegError::InvalidData(
+                "MP4 PCM decoded length does not match sample table duration".to_string(),
+            ));
+        }
+        let mut output_offset = 0_usize;
+        while output_offset < decoded.len() {
+            let output_end = output_offset
+                .checked_add(max_output_bytes)
+                .map(|end| end.min(decoded.len()))
+                .ok_or_else(|| {
+                    RmpegError::InvalidData("MP4 PCM output range overflow".to_string())
+                })?;
+            let output = &decoded[output_offset..output_end];
+            let duration = output.len() / frame_bytes;
+            if duration == 0 {
+                output_offset = output_end;
+                continue;
+            }
+            let is_final_output = chunk_index + 1 == chunk_count && output_end == decoded.len();
+            if samples.codec_name == "pcm_s16be"
+                && is_final_output
+                && duration < 1024
+                && output.iter().all(|byte| *byte == 0)
+            {
+                break;
+            }
+            let duration = u32::try_from(duration).map_err(|_| {
+                RmpegError::Unsupported("MP4 PCM output frame is too long".to_string())
+            })?;
+            frames.push(AudioFrameHash {
+                stream_index: 0,
+                dts: pts,
+                pts,
+                duration,
+                size: output.len(),
+                hash: md5_hex(output),
+            });
+            pts += u64::from(duration);
+            output_offset = output_end;
+        }
+    }
+
+    Ok(AudioFrameHashDocument {
+        sample_rate: samples.sample_rate,
+        channels,
+        frames,
+    })
+}
+
+fn append_mp4_pcm_chunk(output: &mut Vec<u8>, codec_name: &str, input: &[u8]) -> Result<()> {
+    match codec_name {
+        "pcm_u8" => output.extend_from_slice(&pcm_u8_to_s16le_bytes(input)),
+        "pcm_s16le" => {
+            if !input.len().is_multiple_of(2) {
+                return Err(RmpegError::InvalidData(
+                    "MP4 s16le chunk has trailing partial sample".to_string(),
+                ));
+            }
+            output.extend_from_slice(input);
+        }
+        "pcm_s16be" => {
+            let chunks = input.chunks_exact(2);
+            if !chunks.remainder().is_empty() {
+                return Err(RmpegError::InvalidData(
+                    "MP4 s16be chunk has trailing partial sample".to_string(),
+                ));
+            }
+            for chunk in chunks {
+                output.extend_from_slice(&i16::from_be_bytes([chunk[0], chunk[1]]).to_le_bytes());
+            }
+        }
+        "pcm_s24le" => {
+            let chunks = input.chunks_exact(3);
+            if !chunks.remainder().is_empty() {
+                return Err(RmpegError::InvalidData(
+                    "MP4 s24le chunk has trailing partial sample".to_string(),
+                ));
+            }
+            for chunk in chunks {
+                output.extend_from_slice(&s24le_to_s16(chunk).to_le_bytes());
+            }
+        }
+        _ => {
+            return Err(RmpegError::Unsupported(format!(
+                "MP4 audio codec {codec_name} is not supported PCM"
+            )))
+        }
+    }
+    Ok(())
 }
 
 fn decode_raw_s16le_samples(path: &str, input: &[u8]) -> Result<DecodedAudio> {
@@ -1037,10 +1158,10 @@ fn wav_pipe_bytes(decoded: &DecodedAudio) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        avi_chunk_stream_index, channel_layout_name, decimal_seconds_to_samples,
-        decode_s16le_sample_bytes, decode_s24le_sample_bytes, decode_s32le_sample_bytes,
-        parse_rate, pcm_u8_to_s16le_bytes, resample_windowed_sinc, scale_s16_volume,
-        swr_edge_index, swr_filter_tap_count, video_frame_count, wav_pipe_bytes,
+        append_mp4_pcm_chunk, avi_chunk_stream_index, channel_layout_name,
+        decimal_seconds_to_samples, decode_s16le_sample_bytes, decode_s24le_sample_bytes,
+        decode_s32le_sample_bytes, parse_rate, pcm_u8_to_s16le_bytes, resample_windowed_sinc,
+        scale_s16_volume, swr_edge_index, swr_filter_tap_count, video_frame_count, wav_pipe_bytes,
         yuv420p_frame_size, DecodedAudio,
     };
 
@@ -1116,6 +1237,22 @@ mod tests {
             pcm_u8_to_s16le_bytes(&[0x00, 0x80, 0xff]),
             vec![0x00, 0x80, 0x00, 0x00, 0x00, 0x7f]
         );
+    }
+
+    #[test]
+    fn converts_mp4_pcm_chunks_to_signed_s16le() {
+        let mut output = Vec::new();
+        append_mp4_pcm_chunk(&mut output, "pcm_s16be", &[0x80, 0x00, 0x7f, 0xff]).unwrap();
+        assert_eq!(output, vec![0x00, 0x80, 0xff, 0x7f]);
+        output.clear();
+        append_mp4_pcm_chunk(
+            &mut output,
+            "pcm_s24le",
+            &[0x00, 0x00, 0x80, 0xff, 0xff, 0x7f],
+        )
+        .unwrap();
+        assert_eq!(output, vec![0x00, 0x80, 0xff, 0x7f]);
+        assert!(append_mp4_pcm_chunk(&mut output, "pcm_s16be", &[0]).is_err());
     }
 
     #[test]

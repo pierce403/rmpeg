@@ -27,6 +27,20 @@ pub struct Mp4H264SampleData {
     pub samples: Vec<Vec<u8>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mp4PcmSampleData {
+    pub sample_rate: u32,
+    pub channels: u16,
+    pub codec_name: String,
+    pub chunks: Vec<Mp4PcmChunk>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mp4PcmChunk {
+    pub duration: u32,
+    pub data: Vec<u8>,
+}
+
 #[derive(Debug, Default)]
 struct TrackBuilder {
     handler: Option<[u8; 4]>,
@@ -51,6 +65,17 @@ struct H264SampleTable {
     chunk_offsets: Vec<u64>,
     sample_to_chunks: Vec<SampleToChunk>,
     stts: Option<(usize, u64)>,
+}
+
+#[derive(Debug, Default)]
+struct PcmSampleTable {
+    codec_name: Option<String>,
+    sample_rate: Option<u32>,
+    channels: Option<u16>,
+    bits_per_sample: Option<u16>,
+    sample_count: Option<usize>,
+    chunk_offsets: Vec<u64>,
+    sample_to_chunks: Vec<SampleToChunk>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -239,6 +264,35 @@ pub fn extract_mp4_h264_samples(bytes: &[u8]) -> Result<Option<Mp4H264SampleData
     Ok(None)
 }
 
+pub fn extract_mp4_pcm_samples(bytes: &[u8]) -> Result<Option<Mp4PcmSampleData>> {
+    if !looks_like_mp4(bytes) {
+        return Ok(None);
+    }
+
+    let mut pos = 0;
+    while let Ok(Some(header)) = next_box(bytes, pos, bytes.len()) {
+        if &header.name == b"moov" {
+            let mut moov_pos = header.data_start;
+            while let Some(moov_header) = next_box(bytes, moov_pos, header.end)? {
+                if &moov_header.name == b"trak"
+                    && trak_handler(bytes, moov_header.data_start, moov_header.end)?
+                        == Some(*b"soun")
+                {
+                    let samples =
+                        parse_trak_pcm_samples(bytes, moov_header.data_start, moov_header.end)?;
+                    if samples.is_some() {
+                        return Ok(samples);
+                    }
+                }
+                moov_pos = moov_header.end;
+            }
+        }
+        pos = header.end;
+    }
+
+    Ok(None)
+}
+
 fn parse_trak_video_timing(
     bytes: &[u8],
     start: usize,
@@ -374,6 +428,176 @@ fn parse_stbl_h264_sample_table(
         pos = header.end;
     }
     Ok(())
+}
+
+fn parse_trak_pcm_samples(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<Option<Mp4PcmSampleData>> {
+    let media_timing = parse_trak_media_timing(bytes, start, end)?;
+    let mut table = PcmSampleTable::default();
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"mdia" {
+            parse_mdia_pcm_sample_table(bytes, header.data_start, header.end, &mut table)?;
+        }
+        pos = header.end;
+    }
+
+    let Some(codec_name) = table.codec_name else {
+        return Ok(None);
+    };
+    let Some(bytes_per_sample) = mp4_pcm_bytes_per_sample(&codec_name) else {
+        return Ok(None);
+    };
+    let Some(sample_rate) = table.sample_rate else {
+        return Ok(None);
+    };
+    let Some(channels) = table.channels else {
+        return Ok(None);
+    };
+    if table
+        .bits_per_sample
+        .is_none_or(|bits| bits != (bytes_per_sample as u16) * 8)
+    {
+        return Ok(None);
+    }
+    let Some(sample_count) = table.sample_count else {
+        return Ok(None);
+    };
+    let sample_count = mp4_pcm_sample_count(sample_count, sample_rate, media_timing)?;
+    let block_align = usize::from(channels)
+        .checked_mul(bytes_per_sample)
+        .ok_or_else(|| RmpegError::InvalidData("MP4 PCM block align overflow".to_string()))?;
+    if block_align == 0 {
+        return Ok(None);
+    }
+    let chunks = assemble_pcm_chunks(
+        bytes,
+        sample_count,
+        &table.chunk_offsets,
+        &table.sample_to_chunks,
+        block_align,
+    )?;
+    if chunks.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(Mp4PcmSampleData {
+        sample_rate,
+        channels,
+        codec_name,
+        chunks,
+    }))
+}
+
+fn parse_mdia_pcm_sample_table(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    table: &mut PcmSampleTable,
+) -> Result<()> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"minf" {
+            parse_minf_pcm_sample_table(bytes, header.data_start, header.end, table)?;
+        }
+        pos = header.end;
+    }
+    Ok(())
+}
+
+fn parse_minf_pcm_sample_table(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    table: &mut PcmSampleTable,
+) -> Result<()> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"stbl" {
+            parse_stbl_pcm_sample_table(bytes, header.data_start, header.end, table)?;
+        }
+        pos = header.end;
+    }
+    Ok(())
+}
+
+fn parse_stbl_pcm_sample_table(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    table: &mut PcmSampleTable,
+) -> Result<()> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        match &header.name {
+            b"stsd" => parse_pcm_stsd(bytes, header.data_start, header.end, table)?,
+            b"stsz" => {
+                table.sample_count = Some(parse_stsz_sample_count(
+                    bytes,
+                    header.data_start,
+                    header.end,
+                )?)
+            }
+            b"stco" => table.chunk_offsets = parse_stco_box(bytes, header.data_start, header.end)?,
+            b"co64" => table.chunk_offsets = parse_co64_box(bytes, header.data_start, header.end)?,
+            b"stsc" => {
+                table.sample_to_chunks = parse_stsc_box(bytes, header.data_start, header.end)?
+            }
+            _ => {}
+        }
+        pos = header.end;
+    }
+    Ok(())
+}
+
+fn parse_pcm_stsd(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    table: &mut PcmSampleTable,
+) -> Result<()> {
+    let mut track = TrackBuilder {
+        handler: Some(*b"soun"),
+        ..Default::default()
+    };
+    parse_stsd(&bytes[start..end], &mut track)?;
+    table.codec_name = track.codec_name;
+    table.sample_rate = track.sample_rate;
+    table.channels = track.channels;
+    table.bits_per_sample = track.bits_per_sample;
+    Ok(())
+}
+
+fn mp4_pcm_bytes_per_sample(codec_name: &str) -> Option<usize> {
+    match codec_name {
+        "pcm_u8" => Some(1),
+        "pcm_s16le" | "pcm_s16be" => Some(2),
+        "pcm_s24le" => Some(3),
+        _ => None,
+    }
+}
+
+fn mp4_pcm_sample_count(
+    table_sample_count: usize,
+    sample_rate: u32,
+    media_timing: Option<(u32, u64)>,
+) -> Result<usize> {
+    let Some((timescale, duration)) = media_timing else {
+        return Ok(table_sample_count);
+    };
+    if timescale == 0 || duration == 0 {
+        return Ok(table_sample_count);
+    }
+    let media_samples = u128::from(duration)
+        .checked_mul(u128::from(sample_rate))
+        .ok_or_else(|| RmpegError::InvalidData("MP4 PCM duration overflow".to_string()))?
+        / u128::from(timescale);
+    let media_samples = usize::try_from(media_samples)
+        .map_err(|_| RmpegError::Unsupported("MP4 PCM duration is too large".to_string()))?;
+    Ok(table_sample_count.min(media_samples))
 }
 
 fn parse_h264_stsd(
@@ -535,6 +759,17 @@ fn parse_stsz_box(bytes: &[u8], start: usize, end: usize) -> Result<Vec<usize>> 
     Ok(sizes)
 }
 
+fn parse_stsz_sample_count(bytes: &[u8], start: usize, end: usize) -> Result<usize> {
+    if start + 12 > end {
+        return Err(RmpegError::UnexpectedEof {
+            needed: start + 12,
+            remaining: bytes.len(),
+        });
+    }
+    usize::try_from(read_u32(bytes, start + 8)?)
+        .map_err(|_| RmpegError::Unsupported("MP4 sample count is too large".to_string()))
+}
+
 fn parse_stco_box(bytes: &[u8], start: usize, end: usize) -> Result<Vec<u64>> {
     if start + 8 > end {
         return Err(RmpegError::UnexpectedEof {
@@ -671,6 +906,72 @@ fn assemble_chunk_samples(
         ));
     }
     Ok(samples)
+}
+
+fn assemble_pcm_chunks(
+    bytes: &[u8],
+    sample_count: usize,
+    chunk_offsets: &[u64],
+    sample_to_chunks: &[SampleToChunk],
+    block_align: usize,
+) -> Result<Vec<Mp4PcmChunk>> {
+    if sample_count == 0 {
+        return Ok(Vec::new());
+    }
+    if chunk_offsets.is_empty() || sample_to_chunks.is_empty() {
+        return Err(RmpegError::InvalidData(
+            "incomplete MP4 PCM sample table".to_string(),
+        ));
+    }
+
+    let mut chunks = Vec::new();
+    let mut sample_index = 0_usize;
+    let mut stsc_index = 0_usize;
+    for (chunk_index, chunk_offset) in chunk_offsets.iter().enumerate() {
+        let chunk_number = u32::try_from(chunk_index + 1)
+            .map_err(|_| RmpegError::Unsupported("too many MP4 chunks".to_string()))?;
+        while stsc_index + 1 < sample_to_chunks.len()
+            && sample_to_chunks[stsc_index + 1].first_chunk <= chunk_number
+        {
+            stsc_index += 1;
+        }
+        let remaining_samples = sample_count.saturating_sub(sample_index);
+        if remaining_samples == 0 {
+            break;
+        }
+        let chunk_samples =
+            remaining_samples.min(sample_to_chunks[stsc_index].samples_per_chunk as usize);
+        let byte_count = chunk_samples
+            .checked_mul(block_align)
+            .ok_or_else(|| RmpegError::InvalidData("MP4 PCM chunk size overflow".to_string()))?;
+        let sample_pos = usize::try_from(*chunk_offset)
+            .map_err(|_| RmpegError::Unsupported("MP4 chunk offset is too large".to_string()))?;
+        let sample_end = sample_pos
+            .checked_add(byte_count)
+            .ok_or_else(|| RmpegError::InvalidData("MP4 PCM chunk offset overflow".to_string()))?;
+        if sample_end > bytes.len() {
+            if !chunks.is_empty() {
+                break;
+            }
+            return Err(RmpegError::UnexpectedEof {
+                needed: sample_end,
+                remaining: bytes.len(),
+            });
+        }
+        chunks.push(Mp4PcmChunk {
+            duration: u32::try_from(chunk_samples)
+                .map_err(|_| RmpegError::Unsupported("MP4 PCM chunk is too long".to_string()))?,
+            data: bytes[sample_pos..sample_end].to_vec(),
+        });
+        sample_index += chunk_samples;
+    }
+
+    if sample_index != sample_count && chunks.is_empty() {
+        return Err(RmpegError::InvalidData(
+            "MP4 PCM sample table did not map all samples".to_string(),
+        ));
+    }
+    Ok(chunks)
 }
 
 fn parse_mdia_stts(bytes: &[u8], start: usize, end: usize) -> Result<Option<(usize, u64)>> {
@@ -1026,13 +1327,34 @@ fn parse_trak_timescale(bytes: &[u8], start: usize, end: usize) -> Result<Option
     Ok(None)
 }
 
+fn parse_trak_media_timing(bytes: &[u8], start: usize, end: usize) -> Result<Option<(u32, u64)>> {
+    let mut pos = start;
+    while let Some(header) = next_box(bytes, pos, end)? {
+        if &header.name == b"mdia" {
+            let mut mdia_pos = header.data_start;
+            while let Some(mdia_header) = next_box(bytes, mdia_pos, header.end)? {
+                if &mdia_header.name == b"mdhd" {
+                    return parse_mdhd_timing(&bytes[mdia_header.data_start..mdia_header.end]);
+                }
+                mdia_pos = mdia_header.end;
+            }
+        }
+        pos = header.end;
+    }
+    Ok(None)
+}
+
 fn parse_mdhd_timescale(data: &[u8]) -> Result<Option<u32>> {
+    Ok(parse_mdhd_timing(data)?.map(|(timescale, _)| timescale))
+}
+
+fn parse_mdhd_timing(data: &[u8]) -> Result<Option<(u32, u64)>> {
     if data.len() < 20 {
         return Ok(None);
     }
     match data[0] {
-        0 => Ok(Some(read_u32(data, 12)?)),
-        1 if data.len() >= 32 => Ok(Some(read_u32(data, 20)?)),
+        0 => Ok(Some((read_u32(data, 12)?, u64::from(read_u32(data, 16)?)))),
+        1 if data.len() >= 32 => Ok(Some((read_u32(data, 20)?, read_u64(data, 24)?))),
         _ => Ok(None),
     }
 }
@@ -1930,6 +2252,70 @@ mod tests {
         assert_eq!(samples.sps, vec![vec![0x67, 0x42, 0x00]]);
         assert_eq!(samples.pps, vec![vec![0x68, 0xce]]);
         assert_eq!(samples.samples, vec![sample_1.to_vec(), sample_2.to_vec()]);
+    }
+
+    #[test]
+    fn extracts_pcm_samples_from_single_chunk_mp4() {
+        let ftyp = box_bytes(b"ftyp", b"qt  \0\0\0\0qt  ");
+        let mdat_payload = [0x00, 0x80, 0xff, 0x01];
+        let chunk_offset = (ftyp.len() + 8) as u32;
+        let mdat = box_bytes(b"mdat", &mdat_payload);
+
+        let mut raw_payload = vec![0; 28];
+        raw_payload[16..18].copy_from_slice(&1_u16.to_be_bytes());
+        raw_payload[24..28].copy_from_slice(&(44_100_u32 << 16).to_be_bytes());
+        let raw = box_bytes(b"raw ", &raw_payload);
+
+        let mut stsd = vec![0; 4];
+        stsd.extend_from_slice(&1_u32.to_be_bytes());
+        stsd.extend_from_slice(&raw);
+
+        let mut stsz = vec![0; 4];
+        stsz.extend_from_slice(&1_u32.to_be_bytes());
+        stsz.extend_from_slice(&4_u32.to_be_bytes());
+
+        let mut stco = vec![0; 4];
+        stco.extend_from_slice(&1_u32.to_be_bytes());
+        stco.extend_from_slice(&chunk_offset.to_be_bytes());
+
+        let mut stsc = vec![0; 4];
+        stsc.extend_from_slice(&1_u32.to_be_bytes());
+        stsc.extend_from_slice(&1_u32.to_be_bytes());
+        stsc.extend_from_slice(&4_u32.to_be_bytes());
+        stsc.extend_from_slice(&1_u32.to_be_bytes());
+
+        let mut stbl = Vec::new();
+        stbl.extend_from_slice(&box_bytes(b"stsd", &stsd));
+        stbl.extend_from_slice(&box_bytes(b"stsz", &stsz));
+        stbl.extend_from_slice(&box_bytes(b"stco", &stco));
+        stbl.extend_from_slice(&box_bytes(b"stsc", &stsc));
+
+        let mut mdhd = vec![0; 24];
+        mdhd[12..16].copy_from_slice(&44_100_u32.to_be_bytes());
+        mdhd[16..20].copy_from_slice(&4_u32.to_be_bytes());
+        let mut hdlr = vec![0; 12];
+        hdlr[8..12].copy_from_slice(b"soun");
+        let minf = box_bytes(b"stbl", &stbl);
+        let mut mdia = Vec::new();
+        mdia.extend_from_slice(&box_bytes(b"mdhd", &mdhd));
+        mdia.extend_from_slice(&box_bytes(b"hdlr", &hdlr));
+        mdia.extend_from_slice(&box_bytes(b"minf", &minf));
+        let trak = box_bytes(b"mdia", &mdia);
+        let moov = box_bytes(b"trak", &trak);
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&ftyp);
+        bytes.extend_from_slice(&mdat);
+        bytes.extend_from_slice(&box_bytes(b"moov", &moov));
+
+        let samples = extract_mp4_pcm_samples(&bytes).unwrap().unwrap();
+
+        assert_eq!(samples.sample_rate, 44_100);
+        assert_eq!(samples.channels, 1);
+        assert_eq!(samples.codec_name, "pcm_u8");
+        assert_eq!(samples.chunks.len(), 1);
+        assert_eq!(samples.chunks[0].duration, 4);
+        assert_eq!(samples.chunks[0].data, mdat_payload);
     }
 
     #[test]
