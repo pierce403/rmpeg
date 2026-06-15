@@ -308,17 +308,31 @@ pub fn dpx_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
             header.bit_depth,
             header.packing,
         );
-        if let Some(stream_shape) = stream_shape {
-            if stream_shape != shape {
+        if stream_shape.is_none() {
+            stream_shape = Some(shape);
+        }
+        let frame = if let Some((target_width, target_height, bit_depth, packing)) = stream_shape {
+            let frame = dpx_frame(input, pos, &header)?;
+            if shape == (target_width, target_height, bit_depth, packing) {
+                frame
+            } else if bit_depth == 8 && packing == 0 && header.bit_depth == 8 && header.packing == 0
+            {
+                dpx_resize_interleaved_nearest(
+                    &frame,
+                    header.width,
+                    header.height,
+                    target_width,
+                    target_height,
+                    3,
+                )?
+            } else {
                 return Err(RmpegError::Unsupported(
-                    "variable-dimension DPX sequences require exact compatibility backend"
-                        .to_string(),
+                    "variable-format DPX sequences are unsupported".to_string(),
                 ));
             }
         } else {
-            stream_shape = Some(shape);
-        }
-        let frame = dpx_frame(input, pos, &header)?;
+            unreachable!("stream shape is initialized before decoding")
+        };
         let frame_index = frames.len() as u64;
         frames.push(AudioFrameHash {
             stream_index: 0,
@@ -349,6 +363,63 @@ pub fn dpx_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
         return Err(RmpegError::InvalidData("empty DPX input".to_string()));
     }
     Ok(frames)
+}
+
+fn dpx_resize_interleaved_nearest(
+    frame: &[u8],
+    width: usize,
+    height: usize,
+    target_width: usize,
+    target_height: usize,
+    bytes_per_pixel: usize,
+) -> Result<Vec<u8>> {
+    let source_row_bytes = width
+        .checked_mul(bytes_per_pixel)
+        .ok_or_else(|| RmpegError::InvalidData("DPX resize source row overflow".to_string()))?;
+    let target_row_bytes = target_width
+        .checked_mul(bytes_per_pixel)
+        .ok_or_else(|| RmpegError::InvalidData("DPX resize target row overflow".to_string()))?;
+    let expected_source = source_row_bytes
+        .checked_mul(height)
+        .ok_or_else(|| RmpegError::InvalidData("DPX resize source frame overflow".to_string()))?;
+    if frame.len() != expected_source {
+        return Err(RmpegError::InvalidData(
+            "DPX resize source frame size mismatch".to_string(),
+        ));
+    }
+    let mut output = vec![
+        0;
+        target_row_bytes.checked_mul(target_height).ok_or_else(|| {
+            RmpegError::InvalidData("DPX resize target frame overflow".to_string())
+        })?
+    ];
+    for y in 0..target_height {
+        let source_y = y
+            .checked_mul(height)
+            .map(|value| value / target_height)
+            .ok_or_else(|| RmpegError::InvalidData("DPX resize y overflow".to_string()))?;
+        for x in 0..target_width {
+            let source_x = x
+                .checked_mul(width)
+                .map(|value| value / target_width)
+                .ok_or_else(|| RmpegError::InvalidData("DPX resize x overflow".to_string()))?;
+            let source = source_y
+                .checked_mul(source_row_bytes)
+                .and_then(|offset| offset.checked_add(source_x * bytes_per_pixel))
+                .ok_or_else(|| {
+                    RmpegError::InvalidData("DPX resize source offset overflow".to_string())
+                })?;
+            let target = y
+                .checked_mul(target_row_bytes)
+                .and_then(|offset| offset.checked_add(x * bytes_per_pixel))
+                .ok_or_else(|| {
+                    RmpegError::InvalidData("DPX resize target offset overflow".to_string())
+                })?;
+            output[target..target + bytes_per_pixel]
+                .copy_from_slice(&frame[source..source + bytes_per_pixel]);
+        }
+    }
+    Ok(output)
 }
 
 pub fn fits_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
@@ -3939,6 +4010,23 @@ mod tests {
         assert_eq!(frames.len(), 2);
         assert_eq!(frames[0].hash, md5_hex(&[0x10, 0x20, 0x30]));
         assert_eq!(frames[1].dts, 1);
+        assert_eq!(frames[1].hash, md5_hex(&[0x40, 0x50, 0x60]));
+    }
+
+    #[test]
+    fn hashes_variable_dimension_dpx_sequence_as_native_attempt() {
+        let mut input = dpx_header(false, 1, 1, 8, 0);
+        input.extend_from_slice(&[0x10, 0x20, 0x30, 0x00]);
+        input.extend_from_slice(&dpx_header(false, 2, 2, 8, 0));
+        input.extend_from_slice(&[0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0x00, 0x00]);
+        input.extend_from_slice(&[0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x00, 0x00]);
+
+        let frames = dpx_image_frame_hashes(&input).expect("dpx frame hash");
+
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].size, 3);
+        assert_eq!(frames[0].hash, md5_hex(&[0x10, 0x20, 0x30]));
+        assert_eq!(frames[1].size, 3);
         assert_eq!(frames[1].hash, md5_hex(&[0x40, 0x50, 0x60]));
     }
 
