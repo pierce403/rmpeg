@@ -26,7 +26,7 @@
 
 - Like PNM, standalone DDS images are reported by ffprobe with a pipe demuxer format (`dds_pipe`) and stream codec `dds`. The DDS dimensions live in the fixed 124-byte header immediately after the magic.
 
-- The raw uncompressed DDS FATE fixtures hash the first/base image payload directly from offset 128. This covers alpha/luma, RGB/BGRA, 16-bit RGB, YUY2/UYVY, and `G1  ` monob layouts. Paletted DDS stores a 1024-byte RGBA palette before the index plane, but FFmpeg hashes the index plane first and appends the palette with red/blue bytes swapped. The observed uncompressed `AEXP` tag premultiplies B/G/R by alpha and forces alpha to 255; `YCG1` uses alpha as Y, red as Co, and green as Cg before emitting BGRA. Native BC1/BC2/BC3, unsigned BC4, and unsigned BC5 decoding matches FFmpeg's rounded RGB565 endpoint lookup table and normal-map blue reconstruction; plain `ATI2` swaps the two BC5 scalar planes while `A2XY` and DX10 BC5 keep X/Y order. DXT2/DXT4 premultiplied-alpha variants, signed BC4/BC5, and DXT5 normal-map/channel-transform variants still need the exact compatibility backend.
+- The raw uncompressed DDS FATE fixtures hash the first/base image payload directly from offset 128. This covers alpha/luma, RGB/BGRA, 16-bit RGB, YUY2/UYVY, and `G1  ` monob layouts. Paletted DDS stores a 1024-byte RGBA palette before the index plane, but FFmpeg hashes the index plane first and appends the palette with red/blue bytes swapped. The observed uncompressed `AEXP` tag premultiplies B/G/R by alpha and forces alpha to 255; `YCG1` uses alpha as Y, red as Co, and green as Cg before emitting BGRA. Native BC1/BC2/BC3/BC4/BC5 decoding matches FFmpeg's rounded RGB565 endpoint lookup table and normal-map blue reconstruction; plain unsigned `ATI2` swaps the two BC5 scalar planes while `A2XY`, DX10 BC5, and signed `BC5S` keep X/Y order. Signed BC4/BC5 interpolation uses floor division for negative weighted endpoints, then maps samples to output bytes with `value + 128`. DXT2/DXT4 premultiplied-alpha variants and DXT1/DXT5 normal-map/channel-transform variants still need the exact compatibility backend.
 
 - Standalone PNG and BMP images also use ffprobe pipe demuxer names (`png_pipe`, `bmp_pipe`) while the video stream codec is just `png` or `bmp`. Animated PNG keeps the same PNG signature but ffprobe reports format `apng` and stream codec `apng` when an `acTL` chunk appears before image data. BMP dimensions are split between old OS/2 CORE headers with 16-bit dimensions and later DIB headers with signed 32-bit dimensions.
 
@@ -86,7 +86,7 @@
 
 - QuickTime sample-entry fourccs cover a lot of metadata-only wins: `rle ` is `qtrle`, `Hap1`/`Hap5`/`HapA`/`HapM`/`HapY` are `hap`, `apch`/`apcn`/`apcs`/`apco`/`ap4h` are `prores`, `AVdn`/`AVdh` are `dnxhd`, and `sowt`/`twos`/`raw `/`in24` map to PCM variants with explicit bit depths. These are container tags, not decode support.
 
-- Encrypted or protected MP4/MOV sample entries can use `encv` while carrying the real codec tag in a nested `sinf/frma` box. The probe surface should prefer that observable original-format tag for metadata naming while leaving decryption and packet handling unimplemented.
+- Encrypted or protected MP4/MOV sample entries can use `encv` while carrying the real codec tag in a nested `sinf/frma` box. The probe surface should prefer that observable original-format tag for metadata naming while keeping decryption and packet handling outside the current native surface.
 
 - The raw DNxHR FATE fixtures share an observed frame header pattern `03 01 80 a0` at bytes 4..8, with big-endian height and width at offsets 24 and 26. Keep that detector narrow; it is enough for the current DNxHR corpus files without claiming a full DNxHD parser.
 
@@ -248,7 +248,7 @@
 
 - AVI partial `movi` LIST sizes can extend beyond EOF. Counting observed stream chunks needs a tolerant chunk walk, but raw chunk count still is not a complete duration oracle for all Fraps and screen-codec partial captures because ffprobe also accounts for codec- or packet-level validity.
 
-- Electronic Arts VP6 chunks use total chunk size, not payload size. The observed `MVhd`/`AVhd` headers store padded dimensions that round up to multiples of 16 and derive duration from a fixed-point fps field at data offset 16. `SCHl` audio headers in the same family can signal `adpcm_ea_r3` at 32 kHz stereo even when decode remains unimplemented.
+- Electronic Arts VP6 chunks use total chunk size, not payload size. The observed `MVhd`/`AVhd` headers store padded dimensions that round up to multiples of 16 and derive duration from a fixed-point fps field at data offset 16. `SCHl` audio headers in the same family can signal `adpcm_ea_r3` at 32 kHz stereo while decode remains outside the current native surface.
 
 - QCP fixtures are RIFF `QLCM` files. For the observed QCELP/EVRC files, local ffprobe reports 8 kHz mono and estimates duration from bytes after the `fmt ` chunk divided by the codec bit rate (`13,000` for QCELP, `9,600` for EVRC), not just from the `data` chunk size.
 

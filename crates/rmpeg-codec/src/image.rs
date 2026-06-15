@@ -183,10 +183,11 @@ pub fn dds_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
             header.height,
             signed,
         )?,
-        DdsPostprocess::Bc5 { swap_xy } => dds_bc5_frame(
+        DdsPostprocess::Bc5 { signed, swap_xy } => dds_bc5_frame(
             &input[header.frame_offset..data_end],
             header.width,
             header.height,
+            signed,
             swap_xy,
         )?,
     };
@@ -1071,7 +1072,7 @@ enum DdsPostprocess {
     Bc2,
     Bc3,
     Bc4 { signed: bool },
-    Bc5 { swap_xy: bool },
+    Bc5 { signed: bool, swap_xy: bool },
 }
 
 fn ptx_header(bytes: &[u8]) -> Result<PtxHeader> {
@@ -1448,7 +1449,23 @@ fn dds_block_compressed_frame(
             b"DXT3" => Some((DDS_HEADER_LEN, 16, DdsPostprocess::Bc2)),
             b"DXT5" => Some((DDS_HEADER_LEN, 16, DdsPostprocess::Bc3)),
             b"ATI1" => Some((DDS_HEADER_LEN, 8, DdsPostprocess::Bc4 { signed: false })),
-            b"ATI2" => Some((DDS_HEADER_LEN, 16, DdsPostprocess::Bc5 { swap_xy: true })),
+            b"BC4S" => Some((DDS_HEADER_LEN, 8, DdsPostprocess::Bc4 { signed: true })),
+            b"ATI2" => Some((
+                DDS_HEADER_LEN,
+                16,
+                DdsPostprocess::Bc5 {
+                    signed: false,
+                    swap_xy: true,
+                },
+            )),
+            b"BC5S" => Some((
+                DDS_HEADER_LEN,
+                16,
+                DdsPostprocess::Bc5 {
+                    signed: true,
+                    swap_xy: false,
+                },
+            )),
             _ => None,
         }
     } else {
@@ -1463,8 +1480,16 @@ fn dds_block_compressed_frame(
         && bits_per_pixel == u32::from_le_bytes(*b"A2XY")
         && special_tag == b"\0\0\0\0"
     {
-        return dds_block_data_size(width, height, 16)
-            .map(|size| Some((DDS_HEADER_LEN, size, DdsPostprocess::Bc5 { swap_xy: false })));
+        return dds_block_data_size(width, height, 16).map(|size| {
+            Some((
+                DDS_HEADER_LEN,
+                size,
+                DdsPostprocess::Bc5 {
+                    signed: false,
+                    swap_xy: false,
+                },
+            ))
+        });
     }
     if fourcc != b"DX10" {
         return Ok(None);
@@ -1484,7 +1509,13 @@ fn dds_block_compressed_frame(
         74 => (16, DdsPostprocess::Bc2),
         77 => (16, DdsPostprocess::Bc3),
         80 => (8, DdsPostprocess::Bc4 { signed: false }),
-        83 => (16, DdsPostprocess::Bc5 { swap_xy: false }),
+        83 => (
+            16,
+            DdsPostprocess::Bc5 {
+                signed: false,
+                swap_xy: false,
+            },
+        ),
         _ => return Ok(None),
     };
     dds_block_data_size(width, height, block_bytes).map(|size| Some((dx10_end, size, postprocess)))
@@ -1635,10 +1666,24 @@ fn dds_bc4_frame(data: &[u8], width: usize, height: usize, signed: bool) -> Resu
     })
 }
 
-fn dds_bc5_frame(data: &[u8], width: usize, height: usize, swap_xy: bool) -> Result<Vec<u8>> {
+fn dds_bc5_frame(
+    data: &[u8],
+    width: usize,
+    height: usize,
+    signed: bool,
+    swap_xy: bool,
+) -> Result<Vec<u8>> {
     dds_decode_blocks(data, width, height, 16, |block, rgba| {
-        let first = dds_bc_alpha_values(&block[0..8]);
-        let second = dds_bc_alpha_values(&block[8..16]);
+        let first = if signed {
+            dds_bc_signed_values(&block[0..8])
+        } else {
+            dds_bc_alpha_values(&block[0..8])
+        };
+        let second = if signed {
+            dds_bc_signed_values(&block[8..16])
+        } else {
+            dds_bc_alpha_values(&block[8..16])
+        };
         for (pixel, output) in rgba.chunks_exact_mut(4).enumerate() {
             let (red, green) = if swap_xy {
                 (second[pixel], first[pixel])
@@ -1812,12 +1857,12 @@ fn dds_bc_signed_values(block: &[u8]) -> [u8; 16] {
     if value0 > value1 {
         for i in 1..=6 {
             let weight = i as i16;
-            table[i + 1] = (value0 * (7 - weight) + value1 * weight) / 7;
+            table[i + 1] = (value0 * (7 - weight) + value1 * weight).div_euclid(7);
         }
     } else {
         for i in 1..=4 {
             let weight = i as i16;
-            table[i + 1] = (value0 * (5 - weight) + value1 * weight) / 5;
+            table[i + 1] = (value0 * (5 - weight) + value1 * weight).div_euclid(5);
         }
         table[6] = -128;
         table[7] = 127;
@@ -1836,8 +1881,7 @@ fn dds_bc_signed_values(block: &[u8]) -> [u8; 16] {
 }
 
 fn dds_signed_to_unorm(value: i16) -> u8 {
-    let value = i32::from(value.clamp(-127, 127) + 127);
-    ((value * 255 + 127) / 254) as u8
+    (value.clamp(-128, 127) + 128) as u8
 }
 
 fn clamp_u8_i32(value: i32) -> u8 {
@@ -3936,6 +3980,27 @@ mod tests {
     }
 
     #[test]
+    fn hashes_dds_bc4_signed_floor_interpolation_like_ffmpeg() {
+        let mut input = dds_fixture(4, 4, DDPF_FOURCC, *b"BC4S", 0, [0, 0, 0, 0], 8);
+        let mut indices = 0_u64;
+        for pixel in 0..16 {
+            indices |= 3_u64 << (pixel * 3);
+        }
+        input.push(0x80);
+        input.push(0x81);
+        input.extend_from_slice(&indices.to_le_bytes()[..6]);
+
+        let frames = dds_image_frame_hashes(&input).expect("dds frame hash");
+
+        let mut expected = Vec::new();
+        for _ in 0..16 {
+            expected.extend_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+        }
+        assert_eq!(frames[0].size, expected.len());
+        assert_eq!(frames[0].hash, md5_hex(&expected));
+    }
+
+    #[test]
     fn hashes_dds_bc5_plain_ati2_swapped_like_ffmpeg() {
         let mut input = dds_fixture(4, 4, DDPF_FOURCC, *b"ATI2", 0, [0, 0, 0, 0], 16);
         input.extend_from_slice(&[0xff, 0x00, 0, 0, 0, 0, 0, 0]);
@@ -3970,6 +4035,28 @@ mod tests {
         let mut expected = Vec::new();
         for _ in 0..16 {
             expected.extend_from_slice(&[0x00, 0x82, 0x9b, 0xff]);
+        }
+        assert_eq!(frames[0].size, expected.len());
+        assert_eq!(frames[0].hash, md5_hex(&expected));
+    }
+
+    #[test]
+    fn hashes_dds_bc5_signed_order_like_ffmpeg() {
+        let mut input = dds_fixture(4, 4, DDPF_FOURCC, *b"BC5S", 0, [0, 0, 0, 0], 16);
+        let mut red_indices = 0_u64;
+        for pixel in 0..16 {
+            red_indices |= 3_u64 << (pixel * 3);
+        }
+        input.push(0x80);
+        input.push(0x81);
+        input.extend_from_slice(&red_indices.to_le_bytes()[..6]);
+        input.extend_from_slice(&[0x7f, 0x00, 0, 0, 0, 0, 0, 0]);
+
+        let frames = dds_image_frame_hashes(&input).expect("dds frame hash");
+
+        let mut expected = Vec::new();
+        for _ in 0..16 {
+            expected.extend_from_slice(&[0x00, 0xff, 0x7f, 0xff]);
         }
         assert_eq!(frames[0].size, expected.len());
         assert_eq!(frames[0].hash, md5_hex(&expected));
