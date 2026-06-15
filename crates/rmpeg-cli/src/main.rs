@@ -651,6 +651,8 @@ fn decode_wav_samples(input: &[u8], wav: &WavFile) -> Result<DecodedAudio> {
                 .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
                 .collect()
         }
+        24 => decode_s24le_sample_bytes(payload)?,
+        32 => decode_s32le_sample_bytes(payload)?,
         8 => payload
             .iter()
             .map(|byte| (i16::from(*byte) - 128) << 8)
@@ -666,6 +668,34 @@ fn decode_wav_samples(input: &[u8], wav: &WavFile) -> Result<DecodedAudio> {
         channels: wav.metadata.channels,
         samples,
     })
+}
+
+fn decode_s24le_sample_bytes(input: &[u8]) -> Result<Vec<i16>> {
+    let chunks = input.chunks_exact(3);
+    if !chunks.remainder().is_empty() {
+        return Err(RmpegError::InvalidData(
+            "raw s24le input has trailing partial sample".to_string(),
+        ));
+    }
+    Ok(chunks.map(s24le_to_s16).collect())
+}
+
+fn decode_s32le_sample_bytes(input: &[u8]) -> Result<Vec<i16>> {
+    let chunks = input.chunks_exact(4);
+    if !chunks.remainder().is_empty() {
+        return Err(RmpegError::InvalidData(
+            "raw s32le input has trailing partial sample".to_string(),
+        ));
+    }
+    Ok(chunks
+        .map(|chunk| i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) >> 16)
+        .map(|sample| sample as i16)
+        .collect())
+}
+
+fn s24le_to_s16(chunk: &[u8]) -> i16 {
+    let sign = if chunk[2] & 0x80 == 0 { 0x00 } else { 0xff };
+    (i32::from_le_bytes([chunk[0], chunk[1], chunk[2], sign]) >> 8) as i16
 }
 
 fn decode_raw_s16le_samples(path: &str, input: &[u8]) -> Result<DecodedAudio> {
@@ -1008,8 +1038,9 @@ fn wav_pipe_bytes(decoded: &DecodedAudio) -> Result<Vec<u8>> {
 mod tests {
     use super::{
         avi_chunk_stream_index, channel_layout_name, decimal_seconds_to_samples,
-        decode_s16le_sample_bytes, parse_rate, pcm_u8_to_s16le_bytes, resample_windowed_sinc,
-        scale_s16_volume, swr_edge_index, swr_filter_tap_count, video_frame_count, wav_pipe_bytes,
+        decode_s16le_sample_bytes, decode_s24le_sample_bytes, decode_s32le_sample_bytes,
+        parse_rate, pcm_u8_to_s16le_bytes, resample_windowed_sinc, scale_s16_volume,
+        swr_edge_index, swr_filter_tap_count, video_frame_count, wav_pipe_bytes,
         yuv420p_frame_size, DecodedAudio,
     };
 
@@ -1048,6 +1079,27 @@ mod tests {
             vec![1, i16::MIN, i16::MAX]
         );
         assert!(decode_s16le_sample_bytes(&[0x01]).is_err());
+    }
+
+    #[test]
+    fn decodes_wide_little_endian_pcm_to_s16() {
+        assert_eq!(
+            decode_s24le_sample_bytes(&[
+                0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0xff, 0xff, 0x7f
+            ])
+            .unwrap(),
+            vec![0, 128, i16::MIN, i16::MAX]
+        );
+        assert_eq!(
+            decode_s32le_sample_bytes(&[
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x80, 0xff, 0xff,
+                0xff, 0x7f
+            ])
+            .unwrap(),
+            vec![0, 1, i16::MIN, i16::MAX]
+        );
+        assert!(decode_s24le_sample_bytes(&[0x00]).is_err());
+        assert!(decode_s32le_sample_bytes(&[0x00, 0x00]).is_err());
     }
 
     #[test]

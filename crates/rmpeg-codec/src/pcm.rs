@@ -71,6 +71,8 @@ pub fn wav_framemd5_samples_per_frame(sample_rate: u32) -> Result<u32> {
 fn decoded_frame_bytes(input: &[u8], wav: &WavFile) -> Result<Vec<u8>> {
     match wav.metadata.bits_per_sample {
         16 => Ok(input.to_vec()),
+        24 => decoded_s24le_frame_bytes(input),
+        32 => decoded_s32le_frame_bytes(input),
         8 => {
             let mut output = Vec::with_capacity(input.len() * 2);
             for byte in input {
@@ -85,9 +87,43 @@ fn decoded_frame_bytes(input: &[u8], wav: &WavFile) -> Result<Vec<u8>> {
     }
 }
 
+fn decoded_s24le_frame_bytes(input: &[u8]) -> Result<Vec<u8>> {
+    let chunks = input.chunks_exact(3);
+    if !chunks.remainder().is_empty() {
+        return Err(RmpegError::InvalidData(
+            "24-bit WAV frame has trailing partial sample".to_string(),
+        ));
+    }
+    let mut output = Vec::with_capacity(input.len() / 3 * 2);
+    for chunk in chunks {
+        let sign = if chunk[2] & 0x80 == 0 { 0x00 } else { 0xff };
+        let sample = (i32::from_le_bytes([chunk[0], chunk[1], chunk[2], sign]) >> 8) as i16;
+        output.extend_from_slice(&sample.to_le_bytes());
+    }
+    Ok(output)
+}
+
+fn decoded_s32le_frame_bytes(input: &[u8]) -> Result<Vec<u8>> {
+    let chunks = input.chunks_exact(4);
+    if !chunks.remainder().is_empty() {
+        return Err(RmpegError::InvalidData(
+            "32-bit WAV frame has trailing partial sample".to_string(),
+        ));
+    }
+    let mut output = Vec::with_capacity(input.len() / 2);
+    for chunk in chunks {
+        let sample = (i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) >> 16) as i16;
+        output.extend_from_slice(&sample.to_le_bytes());
+    }
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{pcm_frame_hashes, wav_framemd5_samples_per_frame};
+    use super::{
+        decoded_s24le_frame_bytes, decoded_s32le_frame_bytes, pcm_frame_hashes,
+        wav_framemd5_samples_per_frame,
+    };
     use rmpeg_format::parse_wav;
 
     fn silent_wav(sample_count: usize) -> Vec<u8> {
@@ -129,5 +165,26 @@ mod tests {
         assert_eq!(wav_framemd5_samples_per_frame(22050).unwrap(), 2048);
         assert_eq!(wav_framemd5_samples_per_frame(44100).unwrap(), 4096);
         assert_eq!(wav_framemd5_samples_per_frame(48000).unwrap(), 4096);
+    }
+
+    #[test]
+    fn decodes_wide_pcm_frames_as_s16le() {
+        assert_eq!(
+            decoded_s24le_frame_bytes(&[
+                0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0xff, 0xff, 0x7f
+            ])
+            .unwrap(),
+            vec![0x00, 0x00, 0x80, 0x00, 0x00, 0x80, 0xff, 0x7f]
+        );
+        assert_eq!(
+            decoded_s32le_frame_bytes(&[
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x80, 0xff, 0xff,
+                0xff, 0x7f
+            ])
+            .unwrap(),
+            vec![0x00, 0x00, 0x01, 0x00, 0x00, 0x80, 0xff, 0x7f]
+        );
+        assert!(decoded_s24le_frame_bytes(&[0]).is_err());
+        assert!(decoded_s32le_frame_bytes(&[0, 0]).is_err());
     }
 }

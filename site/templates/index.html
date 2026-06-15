@@ -334,7 +334,7 @@
       {{phase_progress}}
 
       <h2>Current Status</h2>
-      <p>rmpeg's Phase 1 surface is measured as executable sample rows. The main progress bar tracks upstream execution coverage: every synced sample should produce a clean runnable, failing, or error row, and failed comparisons still count as runnable. Strict FFmpeg match status stays visible in the tables below. The current stack has WAV, raw S16LE, AVI PCM, and FLAC decode/hash, H.264 video frame hashing, native GIF/PNG/APNG/PNM/BMP/DDS/FITS/SGI/DPX/PTX/TGA/Sun Raster/XBM/Alias PIX/BRender PIX image hashing, native lossy-audio execution rows, FLAC-backed filter/seek/remux rows, and broadening probe-level metadata across common audio, video, image, subtitle, game-media, and container formats.</p>
+      <p>rmpeg's Phase 1 surface is measured as executable sample rows. The main progress bar tracks upstream execution coverage: every synced sample should produce a clean runnable, failing, or error row, and failed comparisons still count as runnable. Strict FFmpeg match status stays visible in the tables below. The current stack has 8/16/24/32-bit WAV, raw S16LE, AVI PCM, and FLAC decode/hash, H.264 video frame hashing, native GIF/PNG/APNG/PNM/BMP/DDS/FITS/SGI/DPX/PTX/TGA/Sun Raster/XBM/Alias PIX/BRender PIX image hashing, native lossy-audio execution rows, FLAC-backed filter/seek/remux rows, and broadening probe-level metadata across common audio, video, image, subtitle, game-media, and container formats.</p>
       {{current_status}}
 
       <h2>Correctness</h2>
@@ -348,7 +348,7 @@
       {{benchmarks}}
 
       <h2>Supported Formats</h2>
-      <p>Implemented test surfaces: RIFF/WAVE PCM, raw S16LE, AVI PCM, FLAC, MP3, AAC-in-MP4, Ogg Vorbis, Ogg Opus, H.264 video, GIF/PNG/APNG/PNM/BMP/DDS/FITS/SGI/DPX/PTX/TGA/Sun Raster/XBM/Alias PIX/BRender PIX images, audio filter, seek, resample, and FLAC-to-WAV remux compatibility checks all execute in the mirrored suite. Upstream GIF, APNG, and observed AVI PCM rows decode natively and match FFmpeg for the synced fixtures. Passing support currently includes the mirrored probe, WAV/FLAC decode/hash, raw S16LE, AVI PCM, H.264, GIF/APNG, image, transform, and remux rows; MP3, AAC-in-MP4, Ogg Vorbis, Ogg Opus, and variable-size DPX rows execute through native attempts but are not bitexact yet.</p>
+      <p>Implemented test surfaces: RIFF/WAVE PCM, raw S16LE, AVI PCM, FLAC, MP3, AAC-in-MP4, Ogg Vorbis, Ogg Opus, H.264 video, GIF/PNG/APNG/PNM/BMP/DDS/FITS/SGI/DPX/PTX/TGA/Sun Raster/XBM/Alias PIX/BRender PIX images, audio filter, seek, resample, and FLAC-to-WAV remux compatibility checks all execute in the mirrored suite. Upstream GIF, APNG, observed AVI PCM, and 8/16/24/32-bit WAV rows decode natively and match FFmpeg for the synced fixtures. Passing support currently includes the mirrored probe, WAV/FLAC decode/hash, raw S16LE, AVI PCM, H.264, GIF/APNG, image, transform, and remux rows; MP3, AAC-in-MP4, Ogg Vorbis, Ogg Opus, and variable-size DPX rows execute through native attempts but are not bitexact yet.</p>
       <p>Probe-level metadata is much broader and covers many observed FATE fixtures including MP3, FLAC, Ogg, MP4/MOV, Matroska/WebM, AVI, MPEG-TS, raw H.264/HEVC/VVC/MPEG video, FLV, RealMedia, ASF/WMA, Electronic Arts game media, Bink, Smacker, RoQ, Musepack, DSDIFF/DST, HEIF/HEIC/AVIF, subtitles, and many standalone image formats. Future independent codec and container work can improve strict hashes without changing the sample inventory or progress model.</p>
 
       <h2>Known Failures</h2>

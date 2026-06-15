@@ -381,3 +381,5 @@
 - The generated upstream `ffmpeg-synthetic/asynth1.sw` sample is raw mono little-endian signed 16-bit PCM at 44.1 kHz. Its path-aware probe reports format `s16le` and codec `pcm_s16le`; only decode raw bytes when that exact probe shape is present, because nearby `.s16` and `.pcm` corpus files use extension-gated ADPCM or non-audio shapes.
 
 - AVI PCM framemd5 rows need the RIFF `movi` packet shape, not flattened samples. Observed `pcm_u8` audio chunks such as `KMVC/LOGO1.AVI` remain one framemd5 row per `01wb` chunk after unsigned-to-s16 conversion, while observed `pcm_s16le` chunks such as `fraps/sample-v1.avi` are split by FFmpeg into 256-sample rows plus a tail. Stop media chunk walking if an `idx1` index appears inside the scanned range.
+
+- FFmpeg's WAV framemd5 path emits `pcm_s16le` even for the observed 24-bit and 32-bit little-endian WAV fixtures. Matching rows means sign-extending 24-bit samples, then arithmetic-shifting s24 by 8 and s32 by 16 into signed 16-bit samples before hashing.
