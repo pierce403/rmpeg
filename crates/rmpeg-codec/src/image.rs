@@ -162,10 +162,11 @@ pub fn dds_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
         }
         DdsPostprocess::Aexp => dds_aexp_frame(&input[header.frame_offset..data_end]),
         DdsPostprocess::Ycocg => dds_ycocg_frame(&input[header.frame_offset..data_end]),
-        DdsPostprocess::Bc1 => dds_bc1_frame(
+        DdsPostprocess::Bc1 { normal_map } => dds_bc1_frame(
             &input[header.frame_offset..data_end],
             header.width,
             header.height,
+            normal_map,
         )?,
         DdsPostprocess::Bc2 { premultiplied } => dds_bc2_frame(
             &input[header.frame_offset..data_end],
@@ -173,11 +174,15 @@ pub fn dds_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
             header.height,
             premultiplied,
         )?,
-        DdsPostprocess::Bc3 { premultiplied } => dds_bc3_frame(
+        DdsPostprocess::Bc3 {
+            premultiplied,
+            transform,
+        } => dds_bc3_frame(
             &input[header.frame_offset..data_end],
             header.width,
             header.height,
             premultiplied,
+            transform,
         )?,
         DdsPostprocess::Bc4 { signed } => dds_bc4_frame(
             &input[header.frame_offset..data_end],
@@ -1067,14 +1072,48 @@ struct DdsHeader {
 #[derive(Clone, Copy)]
 enum DdsPostprocess {
     None,
-    Palette { palette_offset: usize },
+    Palette {
+        palette_offset: usize,
+    },
     Aexp,
     Ycocg,
-    Bc1,
-    Bc2 { premultiplied: bool },
-    Bc3 { premultiplied: bool },
-    Bc4 { signed: bool },
-    Bc5 { signed: bool, swap_xy: bool },
+    Bc1 {
+        normal_map: bool,
+    },
+    Bc2 {
+        premultiplied: bool,
+    },
+    Bc3 {
+        premultiplied: bool,
+        transform: DdsBc3Transform,
+    },
+    Bc4 {
+        signed: bool,
+    },
+    Bc5 {
+        signed: bool,
+        swap_xy: bool,
+    },
+}
+
+#[derive(Clone, Copy)]
+enum DdsBc3Transform {
+    None,
+    Aexp,
+    NormalAg,
+    Swizzle(DdsBc3Swizzle),
+    Ycocg { scaled: bool },
+}
+
+#[derive(Clone, Copy)]
+enum DdsBc3Swizzle {
+    Rbxg,
+    Rgxb,
+    Rxbg,
+    Rxgb,
+    Xgbr,
+    Xgxr,
+    Xrbg,
 }
 
 fn ptx_header(bytes: &[u8]) -> Result<PtxHeader> {
@@ -1447,7 +1486,7 @@ fn dds_block_compressed_frame(
     let plain_fourcc = flags == DDPF_FOURCC && bits_per_pixel == 0 && special_tag == b"\0\0\0\0";
     let direct = if plain_fourcc {
         match fourcc {
-            b"DXT1" => Some((DDS_HEADER_LEN, 8, DdsPostprocess::Bc1)),
+            b"DXT1" => Some((DDS_HEADER_LEN, 8, DdsPostprocess::Bc1 { normal_map: false })),
             b"DXT2" => Some((
                 DDS_HEADER_LEN,
                 16,
@@ -1467,6 +1506,7 @@ fn dds_block_compressed_frame(
                 16,
                 DdsPostprocess::Bc3 {
                     premultiplied: true,
+                    transform: DdsBc3Transform::None,
                 },
             )),
             b"DXT5" => Some((
@@ -1474,6 +1514,7 @@ fn dds_block_compressed_frame(
                 16,
                 DdsPostprocess::Bc3 {
                     premultiplied: false,
+                    transform: DdsBc3Transform::None,
                 },
             )),
             b"ATI1" => Some((DDS_HEADER_LEN, 8, DdsPostprocess::Bc4 { signed: false })),
@@ -1502,6 +1543,75 @@ fn dds_block_compressed_frame(
     if let Some((offset, block_bytes, postprocess)) = direct {
         return dds_block_data_size(width, height, block_bytes)
             .map(|size| Some((offset, size, postprocess)));
+    }
+    if flags == (DDPF_FOURCC | 0x8000_0000) && bits_per_pixel == 0 && special_tag == b"\0\0\0\0" {
+        let normal = match fourcc {
+            b"DXT1" => Some((DDS_HEADER_LEN, 8, DdsPostprocess::Bc1 { normal_map: true })),
+            b"DXT5" => Some((
+                DDS_HEADER_LEN,
+                16,
+                DdsPostprocess::Bc3 {
+                    premultiplied: false,
+                    transform: DdsBc3Transform::NormalAg,
+                },
+            )),
+            b"RXGB" => Some((
+                DDS_HEADER_LEN,
+                16,
+                DdsPostprocess::Bc3 {
+                    premultiplied: false,
+                    transform: DdsBc3Transform::Swizzle(DdsBc3Swizzle::Rxgb),
+                },
+            )),
+            _ => None,
+        };
+        if let Some((offset, block_bytes, postprocess)) = normal {
+            return dds_block_data_size(width, height, block_bytes)
+                .map(|size| Some((offset, size, postprocess)));
+        }
+    }
+    if flags == DDPF_FOURCC && fourcc == b"DXT5" {
+        let bits_tag = bits_per_pixel.to_le_bytes();
+        let transform = if bits_tag == [0, 0, 0, 0] {
+            match special_tag {
+                b"AEXP" => Some(DdsBc3Transform::Aexp),
+                b"YCG1" => Some(DdsBc3Transform::Ycocg { scaled: false }),
+                b"YCG2" => Some(DdsBc3Transform::Ycocg { scaled: true }),
+                _ => None,
+            }
+        } else if special_tag == b"\0\0\0\0" {
+            if bits_tag == *b"A2D5" {
+                Some(DdsBc3Transform::NormalAg)
+            } else if bits_tag == *b"RBxG" {
+                Some(DdsBc3Transform::Swizzle(DdsBc3Swizzle::Rbxg))
+            } else if bits_tag == *b"RGxB" {
+                Some(DdsBc3Transform::Swizzle(DdsBc3Swizzle::Rgxb))
+            } else if bits_tag == *b"RxBG" {
+                Some(DdsBc3Transform::Swizzle(DdsBc3Swizzle::Rxbg))
+            } else if bits_tag == *b"xGBR" {
+                Some(DdsBc3Transform::Swizzle(DdsBc3Swizzle::Xgbr))
+            } else if bits_tag == *b"xGxR" {
+                Some(DdsBc3Transform::Swizzle(DdsBc3Swizzle::Xgxr))
+            } else if bits_tag == *b"xRBG" {
+                Some(DdsBc3Transform::Swizzle(DdsBc3Swizzle::Xrbg))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some(transform) = transform {
+            return dds_block_data_size(width, height, 16).map(|size| {
+                Some((
+                    DDS_HEADER_LEN,
+                    size,
+                    DdsPostprocess::Bc3 {
+                        premultiplied: false,
+                        transform,
+                    },
+                ))
+            });
+        }
     }
     if flags == DDPF_FOURCC
         && fourcc == b"ATI2"
@@ -1533,7 +1643,7 @@ fn dds_block_compressed_frame(
     }
     let dxgi_format = read_u32_le(bytes, DDS_HEADER_LEN)?;
     let (block_bytes, postprocess) = match dxgi_format {
-        71 => (8, DdsPostprocess::Bc1),
+        71 => (8, DdsPostprocess::Bc1 { normal_map: false }),
         74 => (
             16,
             DdsPostprocess::Bc2 {
@@ -1544,6 +1654,7 @@ fn dds_block_compressed_frame(
             16,
             DdsPostprocess::Bc3 {
                 premultiplied: false,
+                transform: DdsBc3Transform::None,
             },
         ),
         80 => (8, DdsPostprocess::Bc4 { signed: false }),
@@ -1665,9 +1776,12 @@ fn dds_ycocg_frame(data: &[u8]) -> Vec<u8> {
     frame
 }
 
-fn dds_bc1_frame(data: &[u8], width: usize, height: usize) -> Result<Vec<u8>> {
+fn dds_bc1_frame(data: &[u8], width: usize, height: usize, normal_map: bool) -> Result<Vec<u8>> {
     dds_decode_blocks(data, width, height, 8, |block, rgba| {
         dds_decode_bc_color_block(&block[0..8], true, [0xff; 16], rgba);
+        if normal_map {
+            dds_normal_rg_block(rgba);
+        }
     })
 }
 
@@ -1686,13 +1800,20 @@ fn dds_bc2_frame(data: &[u8], width: usize, height: usize, premultiplied: bool) 
     })
 }
 
-fn dds_bc3_frame(data: &[u8], width: usize, height: usize, premultiplied: bool) -> Result<Vec<u8>> {
+fn dds_bc3_frame(
+    data: &[u8],
+    width: usize,
+    height: usize,
+    premultiplied: bool,
+    transform: DdsBc3Transform,
+) -> Result<Vec<u8>> {
     dds_decode_blocks(data, width, height, 16, |block, rgba| {
         let alpha = dds_bc_alpha_values(&block[0..8]);
         dds_decode_bc_color_block(&block[8..16], false, alpha, rgba);
         if premultiplied {
             dds_unpremultiply_block(rgba);
         }
+        dds_apply_bc3_transform(rgba, transform);
     })
 }
 
@@ -1747,6 +1868,74 @@ fn dds_bc5_blue(red: u8, green: u8) -> u8 {
         127
     } else {
         (f64::from(residual).sqrt().round() as i32).clamp(0, 255) as u8
+    }
+}
+
+fn dds_normal_rg_block(rgba: &mut [u8; 64]) {
+    for pixel in rgba.chunks_exact_mut(4) {
+        let red = pixel[0];
+        let green = pixel[1];
+        pixel.copy_from_slice(&[red, green, dds_bc5_blue(red, green), 0xff]);
+    }
+}
+
+fn dds_apply_bc3_transform(rgba: &mut [u8; 64], transform: DdsBc3Transform) {
+    match transform {
+        DdsBc3Transform::None => {}
+        DdsBc3Transform::Aexp => {
+            for pixel in rgba.chunks_exact_mut(4) {
+                let alpha = u16::from(pixel[3]);
+                pixel[0] = (u16::from(pixel[0]) * alpha / 255) as u8;
+                pixel[1] = (u16::from(pixel[1]) * alpha / 255) as u8;
+                pixel[2] = (u16::from(pixel[2]) * alpha / 255) as u8;
+                pixel[3] = 0xff;
+            }
+        }
+        DdsBc3Transform::NormalAg => {
+            for pixel in rgba.chunks_exact_mut(4) {
+                let red = pixel[3];
+                let green = pixel[1];
+                pixel.copy_from_slice(&[red, green, dds_bc5_blue(red, green), 0xff]);
+            }
+        }
+        DdsBc3Transform::Swizzle(swizzle) => dds_swizzle_bc3_block(rgba, swizzle),
+        DdsBc3Transform::Ycocg { scaled } => dds_ycocg_bc3_block(rgba, scaled),
+    }
+}
+
+fn dds_swizzle_bc3_block(rgba: &mut [u8; 64], swizzle: DdsBc3Swizzle) {
+    for pixel in rgba.chunks_exact_mut(4) {
+        let [red, green, blue, alpha] = [pixel[0], pixel[1], pixel[2], pixel[3]];
+        let output = match swizzle {
+            DdsBc3Swizzle::Rbxg => [red, alpha, green, 0],
+            DdsBc3Swizzle::Rgxb => [red, green, alpha, 0],
+            DdsBc3Swizzle::Rxbg => [red, alpha, blue, 0],
+            DdsBc3Swizzle::Rxgb => [alpha, green, blue, red],
+            DdsBc3Swizzle::Xgbr => [blue, green, alpha, 0],
+            DdsBc3Swizzle::Xgxr => [alpha, green, 0, 0],
+            DdsBc3Swizzle::Xrbg => [green, alpha, blue, 0],
+        };
+        pixel.copy_from_slice(&output);
+    }
+}
+
+fn dds_ycocg_bc3_block(rgba: &mut [u8; 64], scaled: bool) {
+    for pixel in rgba.chunks_exact_mut(4) {
+        let scale = if scaled {
+            1_i32 << u32::from(pixel[2] >> 3)
+        } else {
+            1
+        };
+        let co = (i32::from(pixel[0]) - 128) / scale;
+        let cg = (i32::from(pixel[1]) - 128) / scale;
+        let y = i32::from(pixel[3]);
+        let base = y - cg;
+        pixel.copy_from_slice(&[
+            clamp_u8_i32(base + co),
+            clamp_u8_i32(y + cg),
+            clamp_u8_i32(base - co),
+            0xff,
+        ]);
     }
 }
 
@@ -4051,6 +4240,76 @@ mod tests {
         expected.extend_from_slice(&[0x00, 0x10, 0x00, 0x00]);
         for _ in 1..16 {
             expected.extend_from_slice(&[0x00, 0x22, 0x00, 0x77]);
+        }
+        assert_eq!(frames[0].size, expected.len());
+        assert_eq!(frames[0].hash, md5_hex(&expected));
+    }
+
+    #[test]
+    fn hashes_dds_dxt1_normal_map_like_ffmpeg() {
+        let mut input = dds_fixture(
+            4,
+            4,
+            DDPF_FOURCC | 0x8000_0000,
+            *b"DXT1",
+            0,
+            [0, 0, 0, 0],
+            8,
+        );
+        input.extend_from_slice(&0x0080_u16.to_le_bytes());
+        input.extend_from_slice(&0x0080_u16.to_le_bytes());
+        input.extend_from_slice(&0_u32.to_le_bytes());
+
+        let frames = dds_image_frame_hashes(&input).expect("dds frame hash");
+
+        let mut expected = Vec::new();
+        for _ in 0..16 {
+            expected.extend_from_slice(&[0x00, 0x10, 0xb4, 0xff]);
+        }
+        assert_eq!(frames[0].size, expected.len());
+        assert_eq!(frames[0].hash, md5_hex(&expected));
+    }
+
+    #[test]
+    fn hashes_dds_dxt5_xgbr_swizzle_like_ffmpeg() {
+        let mut input = dds_fixture(
+            4,
+            4,
+            DDPF_FOURCC,
+            *b"DXT5",
+            u32::from_le_bytes(*b"xGBR"),
+            [0, 0, 0, 0],
+            16,
+        );
+        input.extend_from_slice(&[0x82, 0x00, 0, 0, 0, 0, 0, 0]);
+        input.extend_from_slice(&0x001f_u16.to_le_bytes());
+        input.extend_from_slice(&0x001f_u16.to_le_bytes());
+        input.extend_from_slice(&0_u32.to_le_bytes());
+
+        let frames = dds_image_frame_hashes(&input).expect("dds frame hash");
+
+        let mut expected = Vec::new();
+        for _ in 0..16 {
+            expected.extend_from_slice(&[0xff, 0x00, 0x82, 0x00]);
+        }
+        assert_eq!(frames[0].size, expected.len());
+        assert_eq!(frames[0].hash, md5_hex(&expected));
+    }
+
+    #[test]
+    fn hashes_dds_dxt5_ycocg_scaled_like_ffmpeg() {
+        let mut input = dds_fixture(4, 4, DDPF_FOURCC, *b"DXT5", 0, [0, 0, 0, 0], 16);
+        input[44..48].copy_from_slice(b"YCG2");
+        input.extend_from_slice(&[0xff, 0x00, 0, 0, 0, 0, 0, 0]);
+        input.extend_from_slice(&0x8421_u16.to_le_bytes());
+        input.extend_from_slice(&0x8421_u16.to_le_bytes());
+        input.extend_from_slice(&0_u32.to_le_bytes());
+
+        let frames = dds_image_frame_hashes(&input).expect("dds frame hash");
+
+        let mut expected = Vec::new();
+        for _ in 0..16 {
+            expected.extend_from_slice(&[0xfe, 0xff, 0xfa, 0xff]);
         }
         assert_eq!(frames[0].size, expected.len());
         assert_eq!(frames[0].hash, md5_hex(&expected));

@@ -348,7 +348,7 @@
       {{benchmarks}}
 
       <h2>Supported Formats</h2>
-      <p>Implemented test surfaces: RIFF/WAVE PCM, FLAC, MP3, AAC-in-MP4, Ogg Vorbis, Ogg Opus, H.264 video, PNG/PNM/BMP/DDS/FITS/SGI/DPX/PTX/TGA/Sun Raster/XBM/Alias PIX/BRender PIX images, audio filter, seek, resample, and FLAC-to-WAV remux compatibility checks all execute in the mirrored suite. Passing support currently includes all mirrored probe, decode/hash, transform, and remux rows; many non-FLAC audio rows, DXT1/DXT5 normal-map or channel-transform DDS variants, and variable-size DPX sequences use exact FFmpeg compatibility backends until independent decoder math and codec coverage are bitexact.</p>
+      <p>Implemented test surfaces: RIFF/WAVE PCM, FLAC, MP3, AAC-in-MP4, Ogg Vorbis, Ogg Opus, H.264 video, PNG/PNM/BMP/DDS/FITS/SGI/DPX/PTX/TGA/Sun Raster/XBM/Alias PIX/BRender PIX images, audio filter, seek, resample, and FLAC-to-WAV remux compatibility checks all execute in the mirrored suite. Passing support currently includes all mirrored probe, decode/hash, transform, and remux rows; many non-FLAC audio rows and variable-size DPX sequences use exact FFmpeg compatibility backends until independent decoder math and codec coverage are bitexact.</p>
       <p>Probe-level metadata is much broader and covers many observed FATE fixtures including MP3, FLAC, Ogg, MP4/MOV, Matroska/WebM, AVI, MPEG-TS, raw H.264/HEVC/VVC/MPEG video, FLV, RealMedia, ASF/WMA, Electronic Arts game media, Bink, Smacker, RoQ, Musepack, DSDIFF/DST, HEIF/HEIC/AVIF, subtitles, and many standalone image formats. Future independent codec and container work can replace exact-backend rows without changing the sample inventory or progress model.</p>
 
       <h2>Known Failures</h2>
