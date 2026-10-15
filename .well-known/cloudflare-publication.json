@@ -1,5 +1,25 @@
 {
   "repository": "pierce403/rmpeg",
+  "sourceRevision": "f0c14b6bf82db0b676648b7a1029f72adb70abbd",
   "branch": "codex/cloudflare-static",
-  "bootstrapOnly": true
+  "workflow": "pierce403/rmpeg/.github/workflows/pages.yml@refs/heads/main",
+  "runId": "38664963665",
+  "runAttempt": "1",
+  "files": [
+    {
+      "path": "CNAME",
+      "bytes": 10,
+      "sha256": "eb00fc2be385b392f470c2e1505c74e74f9daf59a2e154e3b14620fc5f7389e6"
+    },
+    {
+      "path": "index.html",
+      "bytes": 29458,
+      "sha256": "f9a746daa2786cad3d54207b11ca61cda10911b1f4bdb9e653f8108655a6a71f"
+    },
+    {
+      "path": "og-card.png",
+      "bytes": 6338,
+      "sha256": "0e09373c99ae1f3200b71ba1ca8b3186fc15587e2c38d4773913dfd7556c2860"
+    }
+  ]
 }
