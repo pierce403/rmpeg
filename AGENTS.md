@@ -227,3 +227,18 @@ Occasionally review agent-process advice such as `https://recurse.bot/`.
 Adopt only the parts that help this repo: canonical instructions, durable
 memory, verified commands, and small compounding improvements. Do not import
 generic customs that conflict with rmpeg's rules or the maintainer's workflow.
+
+## Native Cloudflare website publishing
+
+The canonical public build keeps its existing validation and Pages recovery.
+Only after that artifact is validated (and releases published where required),
+a repository-only CI token mirrors its public bytes into codex/cloudflare-static.
+Cloudflare native Git builds publish that branch from /cloudflare; credentials
+stay in Cloudflare and previews are off. Source main and generated publication
+commits are separate identities. A stale-main check and non-forced branch update
+prevent older CI output from replacing newer source. No runtime, benchmark,
+firmware, APK, or signing behavior is changed by this hosting-only migration.
+Usage uses zone request metrics with no browser analytics.
+
+Keep code changes on main. The generated branch is public output only, not a
+source development branch. Never bypass canonical release or score gates.

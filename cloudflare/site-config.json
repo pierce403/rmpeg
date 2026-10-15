@@ -1,0 +1,10 @@
+{
+  "repository": "pierce403/rmpeg",
+  "worker": "rmpeg-org",
+  "domain": "rmpeg.org",
+  "branch": "codex/cloudflare-static",
+  "requiredFiles": [
+    "index.html",
+    "og-card.png"
+  ]
+}
