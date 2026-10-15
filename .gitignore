@@ -20,3 +20,4 @@ __pycache__/
 /cloudflare/node_modules/
 /cloudflare/.wrangler/
 /dist/
+/tmp/
