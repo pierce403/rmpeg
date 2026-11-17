@@ -647,8 +647,9 @@ fn decode_wav_samples(input: &[u8], wav: &WavFile) -> Result<DecodedAudio> {
     let payload = &input[wav.data_offset..end];
     let samples = match wav.metadata.bits_per_sample {
         16 => {
-            let chunks = payload.chunks_exact(2);
-            if !chunks.remainder().is_empty() {
+            let (chunks, remainder) = payload.as_chunks::<2>();
+            let chunks = chunks.iter();
+            if !remainder.is_empty() {
                 return Err(RmpegError::InvalidData(
                     "16-bit WAV data has trailing partial sample".to_string(),
                 ));
@@ -677,18 +678,20 @@ fn decode_wav_samples(input: &[u8], wav: &WavFile) -> Result<DecodedAudio> {
 }
 
 fn decode_s24le_sample_bytes(input: &[u8]) -> Result<Vec<i16>> {
-    let chunks = input.chunks_exact(3);
-    if !chunks.remainder().is_empty() {
+    let (chunks, remainder) = input.as_chunks::<3>();
+    let chunks = chunks.iter();
+    if !remainder.is_empty() {
         return Err(RmpegError::InvalidData(
             "raw s24le input has trailing partial sample".to_string(),
         ));
     }
-    Ok(chunks.map(s24le_to_s16).collect())
+    Ok(chunks.map(|chunk| s24le_to_s16(chunk)).collect())
 }
 
 fn decode_s32le_sample_bytes(input: &[u8]) -> Result<Vec<i16>> {
-    let chunks = input.chunks_exact(4);
-    if !chunks.remainder().is_empty() {
+    let (chunks, remainder) = input.as_chunks::<4>();
+    let chunks = chunks.iter();
+    if !remainder.is_empty() {
         return Err(RmpegError::InvalidData(
             "raw s32le input has trailing partial sample".to_string(),
         ));
@@ -789,8 +792,9 @@ fn append_mp4_pcm_chunk(output: &mut Vec<u8>, codec_name: &str, input: &[u8]) ->
             output.extend_from_slice(input);
         }
         "pcm_s16be" => {
-            let chunks = input.chunks_exact(2);
-            if !chunks.remainder().is_empty() {
+            let (chunks, remainder) = input.as_chunks::<2>();
+            let chunks = chunks.iter();
+            if !remainder.is_empty() {
                 return Err(RmpegError::InvalidData(
                     "MP4 s16be chunk has trailing partial sample".to_string(),
                 ));
@@ -800,8 +804,9 @@ fn append_mp4_pcm_chunk(output: &mut Vec<u8>, codec_name: &str, input: &[u8]) ->
             }
         }
         "pcm_s24le" => {
-            let chunks = input.chunks_exact(3);
-            if !chunks.remainder().is_empty() {
+            let (chunks, remainder) = input.as_chunks::<3>();
+            let chunks = chunks.iter();
+            if !remainder.is_empty() {
                 return Err(RmpegError::InvalidData(
                     "MP4 s24le chunk has trailing partial sample".to_string(),
                 ));
@@ -845,8 +850,9 @@ fn decode_raw_s16le_samples(path: &str, input: &[u8]) -> Result<DecodedAudio> {
 }
 
 fn decode_s16le_sample_bytes(input: &[u8]) -> Result<Vec<i16>> {
-    let chunks = input.chunks_exact(2);
-    if !chunks.remainder().is_empty() {
+    let (chunks, remainder) = input.as_chunks::<2>();
+    let chunks = chunks.iter();
+    if !remainder.is_empty() {
         return Err(RmpegError::InvalidData(
             "raw s16le input has trailing partial sample".to_string(),
         ));

@@ -95,9 +95,9 @@ fn md5_digest(input: &[u8]) -> [u8; 16] {
     let mut c0 = 0x98ba_dcfe_u32;
     let mut d0 = 0x1032_5476_u32;
 
-    for chunk in message.chunks_exact(64) {
+    for chunk in message.as_chunks::<64>().0.iter() {
         let mut words = [0_u32; 16];
-        for (word, bytes) in words.iter_mut().zip(chunk.chunks_exact(4)) {
+        for (word, bytes) in words.iter_mut().zip(chunk.as_chunks::<4>().0.iter()) {
             *word = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
         }
 

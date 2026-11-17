@@ -394,3 +394,5 @@ nonempty/alignment guards, eight-packet probe limit, and six-bit command mask.
 Regression tests cover empty, partial, invalid, masked, and ninth-packet inputs.
 Local Rust 1.91.1 format, workspace Clippy, and workspace tests passed; newer
 stable CI remains the authoritative check for the newly introduced lint.
+
+- Follow-up: Rust 1.100 reports the same constant-chunk lint across codec and CLI modules after the format crate passes. Use array chunks consistently and retain explicit remainder rejection for PCM samples; dynamic-sized chunks remain unchanged.

@@ -395,11 +395,11 @@ fn gif_initial_canvas(
     if let Some(color) =
         global_palette.and_then(|palette| palette.get(usize::from(background_index)))
     {
-        for pixel in canvas.chunks_exact_mut(4) {
+        for pixel in canvas.as_chunks_mut::<4>().0.iter_mut() {
             write_bgra_pixel(pixel, *color, 255);
         }
     } else {
-        for pixel in canvas.chunks_exact_mut(4) {
+        for pixel in canvas.as_chunks_mut::<4>().0.iter_mut() {
             write_transparent_white_pixel(pixel);
         }
     }
@@ -713,7 +713,7 @@ fn read_palette(bytes: &[u8], pos: usize, len: usize) -> Result<Vec<GifColor>> {
         });
     }
     let mut palette = Vec::with_capacity(len);
-    for rgb in bytes[pos..end].chunks_exact(3) {
+    for rgb in bytes[pos..end].as_chunks::<3>().0.iter() {
         palette.push(GifColor {
             red: rgb[0],
             green: rgb[1],

@@ -88,8 +88,9 @@ fn decoded_frame_bytes(input: &[u8], wav: &WavFile) -> Result<Vec<u8>> {
 }
 
 fn decoded_s24le_frame_bytes(input: &[u8]) -> Result<Vec<u8>> {
-    let chunks = input.chunks_exact(3);
-    if !chunks.remainder().is_empty() {
+    let (chunks, remainder) = input.as_chunks::<3>();
+    let chunks = chunks.iter();
+    if !remainder.is_empty() {
         return Err(RmpegError::InvalidData(
             "24-bit WAV frame has trailing partial sample".to_string(),
         ));
@@ -104,8 +105,9 @@ fn decoded_s24le_frame_bytes(input: &[u8]) -> Result<Vec<u8>> {
 }
 
 fn decoded_s32le_frame_bytes(input: &[u8]) -> Result<Vec<u8>> {
-    let chunks = input.chunks_exact(4);
-    if !chunks.remainder().is_empty() {
+    let (chunks, remainder) = input.as_chunks::<4>();
+    let chunks = chunks.iter();
+    if !remainder.is_empty() {
         return Err(RmpegError::InvalidData(
             "32-bit WAV frame has trailing partial sample".to_string(),
         ));

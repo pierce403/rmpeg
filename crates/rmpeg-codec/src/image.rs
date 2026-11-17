@@ -509,7 +509,7 @@ pub fn dds_image_frame_hashes(input: &[u8]) -> Result<Vec<AudioFrameHash>> {
                 .checked_add(DDS_PALETTE_BYTES)
                 .ok_or_else(|| RmpegError::InvalidData("DDS palette range overflow".to_string()))?;
             let mut frame = input[header.frame_offset..data_end].to_vec();
-            for rgba in input[palette_offset..palette_end].chunks_exact(4) {
+            for rgba in input[palette_offset..palette_end].as_chunks::<4>().0.iter() {
                 frame.extend_from_slice(&[rgba[2], rgba[1], rgba[0], rgba[3]]);
             }
             frame
@@ -2176,7 +2176,7 @@ fn dds_direct_frame_size(
 
 fn dds_aexp_frame(data: &[u8]) -> Vec<u8> {
     let mut frame = Vec::with_capacity(data.len());
-    for pixel in data.chunks_exact(4) {
+    for pixel in data.as_chunks::<4>().0.iter() {
         let alpha = u16::from(pixel[3]);
         frame.push((u16::from(pixel[0]) * alpha / 255) as u8);
         frame.push((u16::from(pixel[1]) * alpha / 255) as u8);
@@ -2188,7 +2188,7 @@ fn dds_aexp_frame(data: &[u8]) -> Vec<u8> {
 
 fn dds_ycocg_frame(data: &[u8]) -> Vec<u8> {
     let mut frame = Vec::with_capacity(data.len());
-    for pixel in data.chunks_exact(4) {
+    for pixel in data.as_chunks::<4>().0.iter() {
         let co = i32::from(pixel[2]) - 128;
         let cg = i32::from(pixel[1]) - 128;
         let y = i32::from(pixel[3]);
@@ -2249,7 +2249,7 @@ fn dds_bc4_frame(data: &[u8], width: usize, height: usize, signed: bool) -> Resu
         } else {
             dds_bc_alpha_values(block)
         };
-        for (pixel, output) in rgba.chunks_exact_mut(4).enumerate() {
+        for (pixel, output) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let value = values[pixel];
             output.copy_from_slice(&[value, value, value, 0xff]);
         }
@@ -2274,7 +2274,7 @@ fn dds_bc5_frame(
         } else {
             dds_bc_alpha_values(&block[8..16])
         };
-        for (pixel, output) in rgba.chunks_exact_mut(4).enumerate() {
+        for (pixel, output) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let (red, green) = if swap_xy {
                 (second[pixel], first[pixel])
             } else {
@@ -2297,7 +2297,7 @@ fn dds_bc5_blue(red: u8, green: u8) -> u8 {
 }
 
 fn dds_normal_rg_block(rgba: &mut [u8; 64]) {
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0.iter_mut() {
         let red = pixel[0];
         let green = pixel[1];
         pixel.copy_from_slice(&[red, green, dds_bc5_blue(red, green), 0xff]);
@@ -2308,7 +2308,7 @@ fn dds_apply_bc3_transform(rgba: &mut [u8; 64], transform: DdsBc3Transform) {
     match transform {
         DdsBc3Transform::None => {}
         DdsBc3Transform::Aexp => {
-            for pixel in rgba.chunks_exact_mut(4) {
+            for pixel in rgba.as_chunks_mut::<4>().0.iter_mut() {
                 let alpha = u16::from(pixel[3]);
                 pixel[0] = (u16::from(pixel[0]) * alpha / 255) as u8;
                 pixel[1] = (u16::from(pixel[1]) * alpha / 255) as u8;
@@ -2317,7 +2317,7 @@ fn dds_apply_bc3_transform(rgba: &mut [u8; 64], transform: DdsBc3Transform) {
             }
         }
         DdsBc3Transform::NormalAg => {
-            for pixel in rgba.chunks_exact_mut(4) {
+            for pixel in rgba.as_chunks_mut::<4>().0.iter_mut() {
                 let red = pixel[3];
                 let green = pixel[1];
                 pixel.copy_from_slice(&[red, green, dds_bc5_blue(red, green), 0xff]);
@@ -2329,7 +2329,7 @@ fn dds_apply_bc3_transform(rgba: &mut [u8; 64], transform: DdsBc3Transform) {
 }
 
 fn dds_swizzle_bc3_block(rgba: &mut [u8; 64], swizzle: DdsBc3Swizzle) {
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0.iter_mut() {
         let [red, green, blue, alpha] = [pixel[0], pixel[1], pixel[2], pixel[3]];
         let output = match swizzle {
             DdsBc3Swizzle::Rbxg => [red, alpha, green, 0],
@@ -2345,7 +2345,7 @@ fn dds_swizzle_bc3_block(rgba: &mut [u8; 64], swizzle: DdsBc3Swizzle) {
 }
 
 fn dds_ycocg_bc3_block(rgba: &mut [u8; 64], scaled: bool) {
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0.iter_mut() {
         let scale = if scaled {
             1_i32 << u32::from(pixel[2] >> 3)
         } else {
@@ -2365,7 +2365,7 @@ fn dds_ycocg_bc3_block(rgba: &mut [u8; 64], scaled: bool) {
 }
 
 fn dds_unpremultiply_block(rgba: &mut [u8; 64]) {
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0.iter_mut() {
         let alpha = u16::from(pixel[3]);
         if alpha == 0 {
             continue;
@@ -2444,7 +2444,7 @@ fn dds_decode_bc_color_block(
         colors[3] = [0, 0, 0, 0];
     }
     let indices = u32::from_le_bytes(block[4..8].try_into().expect("BC color index length"));
-    for (pixel, output) in rgba.chunks_exact_mut(4).enumerate() {
+    for (pixel, output) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let index = ((indices >> (pixel * 2)) & 0x03) as usize;
         output.copy_from_slice(&colors[index]);
         if !allow_bc1_alpha || index != 3 || color0 > color1 {
@@ -2690,7 +2690,7 @@ fn pnm_component_frame(bytes: &[u8], header: &PnmHeader, channels: usize) -> Res
     }
 
     let mut frame = Vec::with_capacity(components * 2);
-    for sample in bytes[header.data_offset..end].chunks_exact(2) {
+    for sample in bytes[header.data_offset..end].as_chunks::<2>().0.iter() {
         let value = u32::from(u16::from_be_bytes([sample[0], sample[1]]));
         frame.extend_from_slice(&pnm_scale_u16(value, header.max_value).to_le_bytes());
     }
@@ -3256,7 +3256,7 @@ fn bmp_packed_frame(bytes: &[u8], header: &BmpHeader, bytes_per_pixel: usize) ->
 fn bmp_bgr0_frame(bytes: &[u8], header: &BmpHeader) -> Result<Vec<u8>> {
     let source = bmp_packed_frame(bytes, header, 4)?;
     let mut frame = source;
-    for pixel in frame.chunks_exact_mut(4) {
+    for pixel in frame.as_chunks_mut::<4>().0.iter_mut() {
         pixel[3] = 0;
     }
     Ok(frame)

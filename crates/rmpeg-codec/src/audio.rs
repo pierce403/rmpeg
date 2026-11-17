@@ -295,7 +295,9 @@ fn mpg123_output_to_s16(pcm: &[u8], encoding: libc::c_int) -> Result<Vec<i16>> {
                 ));
             }
             Ok(pcm
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|bytes| i16::from_ne_bytes([bytes[0], bytes[1]]))
                 .collect())
         }
@@ -306,7 +308,9 @@ fn mpg123_output_to_s16(pcm: &[u8], encoding: libc::c_int) -> Result<Vec<i16>> {
                 ));
             }
             Ok(pcm
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .map(|bytes| {
                     ffmpeg_s16_from_f32(f32::from_ne_bytes([
                         bytes[0], bytes[1], bytes[2], bytes[3],
@@ -321,7 +325,9 @@ fn mpg123_output_to_s16(pcm: &[u8], encoding: libc::c_int) -> Result<Vec<i16>> {
                 ));
             }
             Ok(pcm
-                .chunks_exact(8)
+                .as_chunks::<8>()
+                .0
+                .iter()
                 .map(|bytes| {
                     ffmpeg_s16_from_f64(f64::from_ne_bytes([
                         bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
