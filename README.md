@@ -305,3 +305,13 @@ a matching source revision (or the canonical FrogAlert metadata-child receipt),
 then verifies all public hashes. Missing/failed canonical output stops deployment
 and retains the working version. The generated branch distributes public build
 input only. No GitHub lookup is added to the deployed website.
+
+## License
+
+Original project code and documentation are licensed under the
+[Apache License 2.0](LICENSE). Third-party dependencies, source excerpts,
+assets, and other third-party material retain their respective licenses and
+copyright notices; this grant does not relicense that material.
+
+FFmpeg, FATE sample media, and upstream-generated reference material retain
+their original terms. This grant covers original rmpeg work, not those inputs.
