@@ -27,7 +27,9 @@ pub fn looks_like_cdg(bytes: &[u8]) -> bool {
     !bytes.is_empty()
         && bytes.len().is_multiple_of(CDG_PACKET_SIZE)
         && bytes
-            .chunks_exact(CDG_PACKET_SIZE)
+            .as_chunks::<CDG_PACKET_SIZE>()
+            .0
+            .iter()
             .take(8)
             .all(|packet| packet[0] & 0x3f == 0x09)
 }
@@ -35,6 +37,23 @@ pub fn looks_like_cdg(bytes: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_empty_partial_and_invalid_packets() {
+        assert!(!looks_like_cdg(&[]));
+        assert!(!looks_like_cdg(&[0x09; CDG_PACKET_SIZE - 1]));
+        assert!(!looks_like_cdg(&[0x09; CDG_PACKET_SIZE + 1]));
+        assert!(!looks_like_cdg(&[0x00; CDG_PACKET_SIZE]));
+    }
+
+    #[test]
+    fn preserves_eight_packet_probe_and_command_mask() {
+        let mut bytes = vec![0x49; CDG_PACKET_SIZE * 9];
+        bytes[CDG_PACKET_SIZE * 8] = 0x00;
+        assert!(looks_like_cdg(&bytes));
+        bytes[CDG_PACKET_SIZE * 7] = 0x00;
+        assert!(!looks_like_cdg(&bytes));
+    }
 
     #[test]
     fn parses_cdg_duration_from_packet_count() {

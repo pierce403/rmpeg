@@ -385,3 +385,12 @@
 - FFmpeg's WAV framemd5 path emits `pcm_s16le` even for the observed 24-bit and 32-bit little-endian WAV fixtures. Matching rows means sign-extending 24-bit samples, then arithmetic-shifting s24 by 8 and s32 by 16 into signed 16-bit samples before hashing.
 
 - QuickTime/MP4 PCM framemd5 follows chunk boundaries from `stsc`/`stco`, not one continuous 1024-sample stream. Observed `raw `, `sowt`, `twos`, and `in24` fixtures use sample-table counts as audio sample frames, so chunk byte length is `samples_per_chunk * channels * bytes_per_sample`. Truncated MOV files such as the AIC sample still hash complete early chunks and stop before the first out-of-range chunk. The observed `twos` fixture has a trailing 256-sample silent padding row in the sample table that FFmpeg omits.
+
+## 2026-11-17: CDG fixed-size chunks and current Clippy
+
+Current stable CI rejects constant-size `chunks_exact` under `-D warnings`.
+CDG now uses `as_chunks::<CDG_PACKET_SIZE>().0.iter()` while retaining the
+nonempty/alignment guards, eight-packet probe limit, and six-bit command mask.
+Regression tests cover empty, partial, invalid, masked, and ninth-packet inputs.
+Local Rust 1.91.1 format, workspace Clippy, and workspace tests passed; newer
+stable CI remains the authoritative check for the newly introduced lint.
